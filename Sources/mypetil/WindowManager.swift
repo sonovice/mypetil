@@ -568,6 +568,12 @@ final class WindowManager {
         guard let ws = workspace(containing: id), let w = windows[id], let expected = expectedFrames[id],
               let actual = w.element.frame, !actual.isClose(to: expected), !parkedTabs.contains(id) else { return }
 
+        let center = CGPoint(x: actual.midX, y: actual.midY)
+        if byUser, let destination = workspace(at: center), destination !== ws {
+            // Dragged onto another display: tile it there.
+            moveByTitleBar(w, from: ws, to: destination)
+            return
+        }
         if ws.zoomed == id {
             // The user un-maximized (or otherwise changed) the maximized window.
             ws.zoomed = nil
@@ -586,6 +592,25 @@ final class WindowManager {
         // Anything else (e.g. dragged by the title bar) snaps back into its tile.
         targetFrames.removeAll()
         layoutNow()
+    }
+
+    /// A window dragged by its title bar onto another display joins that display's layout,
+    /// landing where the mouse let go of it (split or tab, as with ⌥-drag).
+    private func moveByTitleBar(_ w: ManagedWindow, from source: Workspace, to destination: Workspace) {
+        let mouse = Screens.mouseLocation
+        if destination.screenFrame.contains(mouse), let plan = dropPlan(for: w.id, at: mouse),
+           plan.workspace === destination {
+            performDrop(w.id, plan: plan)
+            return
+        }
+        source.tree.remove(w.id)
+        destination.zoomed = nil
+        let near = destination.layout.group(at: mouse)?.activeWindow
+        destination.tree.insert(w.id, near: near, bounds: destination.tilingBounds, minSizes: minSizes,
+                                options: config.layoutOptions)
+        targetFrames.removeAll()
+        layoutNow()
+        focus(w.id)
     }
 
     private func looksMaximized(_ frame: CGRect, on ws: Workspace) -> Bool {

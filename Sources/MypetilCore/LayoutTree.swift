@@ -270,7 +270,13 @@ public final class LayoutTree {
             (new.minY - old.minY, .vertical, true),     // top edge
             (new.maxY - old.maxY, .vertical, false),    // bottom edge
         ]
-        for move in moves where abs(move.delta) > tolerance {
+        // A resize changes the size along its axis. Equal shifts of both edges are a move
+        // (title-bar drag), which says nothing about the split boundaries.
+        let resized: [Axis: Bool] = [
+            .horizontal: abs(new.width - old.width) > tolerance,
+            .vertical: abs(new.height - old.height) > tolerance,
+        ]
+        for move in moves where abs(move.delta) > tolerance && resized[move.axis] == true {
             guard let split = ancestorSplit(of: g, axis: move.axis, onSecondSide: move.isSecond),
                   let rect = frames[ObjectIdentifier(split)],
                   let firstRect = frames[ObjectIdentifier(split.first)] else { continue }

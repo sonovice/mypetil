@@ -268,6 +268,17 @@ private func frame(_ w: WindowID, _ r: LayoutResult) -> CGRect? { r.group(contai
         #expect(frame(2, r) == CGRect(x: 400, y: 0, width: 600, height: 350))
         #expect(frame(3, r) == CGRect(x: 400, y: 350, width: 600, height: 250))
     }
+
+    @Test func movingWithoutResizingKeepsTheLayout() {
+        // A window dragged by its title bar (e.g. onto another display) is not a resize.
+        let t = LayoutTree()
+        t.insert(1, near: nil, bounds: bounds, options: noGap)
+        t.insert(2, near: 1, bounds: bounds, options: noGap)
+        let before = t.layout(in: bounds, options: noGap)
+        let old = CGRect(x: 500, y: 0, width: 500, height: 600)
+        t.applyManualResize(of: 2, from: old, to: old.offsetBy(dx: 1800, dy: -40), bounds: bounds, options: noGap)
+        #expect(t.layout(in: bounds, options: noGap) == before)
+    }
 }
 
 @Suite struct TabLifecycleTests {

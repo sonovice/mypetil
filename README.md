@@ -11,7 +11,7 @@ Ein Tiling-Window-Manager für macOS mit Fensterleiste am linken Bildschirmrand,
   - Funktioniert auch über Bildschirmgrenzen hinweg und mit schwebenden Fenstern (die dabei gekachelt werden).
   - <kbd>Esc</kbd> bricht den Vorgang ab.
 - **⌥ + Rechtsklick-Ziehen** ändert die Größe. Das Fenster ist dafür in Drittel eingeteilt: In einem Eckfeld bewegt sich die Ecke, in einem Kantenfeld die Kante und im Mittelfeld die nächste Ecke. Während des Ziehens sieht man nur die Vorschau mit allen betroffenen Fenstern. Umsortiert wird erst beim Loslassen.
-- **Fensterrand ziehen** (ganz normal, ohne ⌥) verschiebt die Split-Grenzen und die Nachbarn passen sich an. Ein Fenster, das man an der Titelleiste verschoben hat, springt zurück auf seinen Platz.
+- **Fensterrand ziehen** (ganz normal, ohne ⌥) verschiebt die Split-Grenzen und die Nachbarn passen sich an. Ein Fenster, das man an der Titelleiste verschoben hat, springt zurück auf seinen Platz. Zieht man es an der Titelleiste auf einen anderen Monitor, wird es dort gekachelt, und zwar wie beim ⌥-Ziehen dort, wo man es loslässt.
 - **Maximieren** per Doppelklick auf die Titelleiste, ⌥-Klick auf den grünen Knopf oder über das Kontextmenü der Seitenleiste: Das Fenster füllt dann die Kachelfläche. **Natives Vollbild** nimmt das Fenster aus dem Layout, und Seitenleiste und Overlays bleiben dort ausgeblendet.
 - **Tabs:** Ein Tab lässt sich anklicken, über das × schließen oder herausziehen (dafür braucht es kein ⌥). Tabs werden nie verschachtelt. Ein herausgezogenes Tab wird wieder zu einem normalen Fenster, und eine Gruppe mit nur noch einem Fenster verliert ihre Tab-Leiste.
 - **Fokus-Rahmen** um das aktive Fenster, abschaltbar.
