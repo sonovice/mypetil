@@ -9,7 +9,8 @@ import Carbon.HIToolbox
 ///   Only a preview is shown; the layout changes when the button is released.
 /// - Click on a tab strip: activate that tab (or close it via its ×). Drag a tab: move
 ///   that window, no ⌥ needed.
-/// - ⌃⌥G: float / tile the focused window. Esc cancels a gesture.
+/// - ⌃⌥G: float / tile the focused window. ⌃⌥M: maximize it within the tiling area (not
+///   native full screen). Esc cancels a gesture.
 ///
 /// Events belonging to these gestures are swallowed so the app below never sees them.
 @MainActor
@@ -118,8 +119,8 @@ final class InputController {
                 reset()
                 return nil
             }
-            if key == kVK_ANSI_G, flags == [.maskControl, .maskAlternate] {
-                if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { wm.toggleFloating() }
+            if flags == [.maskControl, .maskAlternate], let command = Self.shortcuts[key] {
+                if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { command(wm)() }
                 return nil
             }
 
@@ -128,6 +129,12 @@ final class InputController {
         }
         return pass
     }
+
+    /// The keyboard shortcuts, all with ⌃⌥.
+    private static let shortcuts: [Int: (WindowManager) -> () -> Void] = [
+        kVK_ANSI_G: { wm in { wm.toggleFloating() } },
+        kVK_ANSI_M: { wm in { wm.toggleZoom() } },
+    ]
 
     private func reset() {
         switch state {

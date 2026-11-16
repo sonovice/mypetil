@@ -189,6 +189,7 @@ private struct ControlsPane: View {
             SettingsRow("Tab anklicken / ziehen:") { Text("Wechseln / herauslösen") }
             SettingsDivider()
             SettingsRow("⌃⌥G:") { Text("Fenster schweben lassen / kacheln") }
+            SettingsRow("⌃⌥M:") { Text("Fenster maximieren / zurück") }
         }
     }
 }

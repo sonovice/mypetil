@@ -701,8 +701,12 @@ final class WindowManager {
         layoutNow()
     }
 
-    func toggleZoom(_ id: CGWindowID) {
-        guard let ws = workspace(containing: id) else { return }
+    /// Maximizes a tiled window over its tiling area, or restores it (the focused window by default).
+    func toggleZoom(_ id: CGWindowID? = nil) {
+        guard let id = id ?? currentlyFocusedWindow, let ws = workspace(containing: id) else {
+            NSSound.beep()
+            return
+        }
         ws.zoomed = ws.zoomed == id ? nil : id
         ws.tree.activate(id)
         targetFrames.removeAll()

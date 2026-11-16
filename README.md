@@ -12,7 +12,7 @@ Ein Tiling-Window-Manager für macOS mit Fensterleiste am linken Bildschirmrand,
   - <kbd>Esc</kbd> bricht den Vorgang ab.
 - **⌥ + Rechtsklick-Ziehen** ändert die Größe. Das Fenster ist dafür in Drittel eingeteilt: In einem Eckfeld bewegt sich die Ecke, in einem Kantenfeld die Kante und im Mittelfeld die nächste Ecke. Während des Ziehens sieht man wie beim Verschieben nur Vorschauen mit Icon und Titel: das Fenster selbst mit Fokus-Rahmen in seiner neuen Größe und alle anderen Fenster so, wie sie danach wären. Umsortiert wird erst beim Loslassen.
 - **Fensterrand ziehen** (ganz normal, ohne ⌥) verschiebt die Split-Grenzen und die Nachbarn passen sich an. Ein Fenster, das man an der Titelleiste verschoben hat, springt zurück auf seinen Platz. Zieht man es an der Titelleiste auf einen anderen Monitor, wird es dort gekachelt, und zwar wie beim ⌥-Ziehen dort, wo man es loslässt.
-- **Maximieren** per Doppelklick auf die Titelleiste, ⌥-Klick auf den grünen Knopf oder über das Kontextmenü der Seitenleiste: Das Fenster füllt dann die Kachelfläche. **Natives Vollbild** nimmt das Fenster aus dem Layout, und Seitenleiste und Overlays bleiben dort ausgeblendet.
+- **Maximieren** per ⌃⌥M, Doppelklick auf die Titelleiste, ⌥-Klick auf den grünen Knopf oder über das Kontextmenü der Seitenleiste: Das Fenster füllt dann die Kachelfläche. **Natives Vollbild** nimmt das Fenster aus dem Layout, und Seitenleiste und Overlays bleiben dort ausgeblendet.
 - **Tabs:** Ein Tab lässt sich anklicken, über das × schließen oder herausziehen (dafür braucht es kein ⌥). Tabs werden nie verschachtelt. Ein herausgezogenes Tab wird wieder zu einem normalen Fenster, und eine Gruppe mit nur noch einem Fenster verliert ihre Tab-Leiste.
 - **Fokus-Rahmen** um das aktive Fenster, abschaltbar.
 - **Mindestgrößen werden respektiert:** Wenn ein Fenster auch nach einem zweiten Versuch nicht kleiner werden will, merkt sich mypetil diese Größe und vergibt den Platz neu. Passt die Summe aller Mindestgrößen nicht auf den Bildschirm, wird der Platz proportional verteilt.
@@ -25,6 +25,7 @@ Ein Tiling-Window-Manager für macOS mit Fensterleiste am linken Bildschirmrand,
 | Kürzel | Aktion |
 |---|---|
 | ⌃⌥ G | Fokussiertes Fenster schweben lassen / kacheln |
+| ⌃⌥ M | Fokussiertes Fenster maximieren / zurück (füllt die Kachelfläche, kein Vollbild) |
 
 Alles andere wird mit der Maus bedient.
 
@@ -56,7 +57,7 @@ Sources/MypetilCore/      reine Layout-Logik, ohne AppKit, vollständig getestet
   Geometry.swift            Drop-Zonen, Resize-Kanten
 Sources/mypetil/
   WindowManager.swift       Zustand und Orchestrierung: AX-Events → Baum → Fensterrahmen
-  InputController.swift     CGEvent-Tap: ⌥-Drag, ⌥-Resize, Tab-Klicks, ⌃⌥G
+  InputController.swift     CGEvent-Tap: ⌥-Drag, ⌥-Resize, Tab-Klicks, ⌃⌥G, ⌃⌥M
   Spaces.swift              Desktops (lesende SkyLight-Abfragen)
   AX/                       Accessibility-Wrapper und AXObserver je App
   UI/                       Seitenleiste, Tab-Leisten, Overlays, Fokus-Rahmen, Einstellungen
