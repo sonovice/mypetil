@@ -25,17 +25,8 @@ final class ChromePanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    /// Shows the panel directly above another app's window, so windows in front of that one
-    /// (floating windows, dialogs) stay in front of the panel too. Without a window, on top.
-    func order(above window: CGWindowID?) {
-        if let window {
-            order(.above, relativeTo: Int(window))
-        } else {
-            orderFrontRegardless()
-        }
-    }
-
-    /// Shows the panel directly below another app's window.
+    /// Shows the panel directly below another app's window, so windows in front of that one
+    /// (floating windows, dialogs) stay in front of the panel too.
     func order(below window: CGWindowID) {
         order(.below, relativeTo: Int(window))
     }

@@ -174,13 +174,13 @@ final class FocusBorder {
         panel.contentView = view
     }
 
-    /// - Parameter window: The framed window; the border sits right above it. Nil (gesture
-    ///   previews) puts it on top of everything.
+    /// - Parameter window: The framed window; the border sits right below it, so the window's
+    ///   shadow falls softly over it. Nil (gesture previews) puts it on top of everything.
     func show(around frame: CGRect, width: CGFloat, windowCornerRadius: CGFloat, animated: Bool = false,
-              above window: CGWindowID? = nil) {
+              below window: CGWindowID? = nil) {
         view.configure(lineWidth: width, windowCornerRadius: windowCornerRadius)
         panel.setAXFrame(frame.insetBy(dx: -width, dy: -width), animated: animated && panel.isVisible)
-        panel.order(above: window)
+        if let window { panel.order(below: window) } else { panel.orderFrontRegardless() }
     }
 
     func hide() { panel.orderOut(nil) }

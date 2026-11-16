@@ -862,7 +862,7 @@ final class WindowManager {
         nativeDrag = id
         guard config.showFocusBorder else { return }
         focusBorder.show(around: windowFrame, width: config.focusBorderWidth,
-                         windowCornerRadius: config.windowCornerRadius, above: id)
+                         windowCornerRadius: config.windowCornerRadius, below: id)
     }
 
     func endSystemDrag() {
@@ -1072,7 +1072,7 @@ final class WindowManager {
             return
         }
         focusBorder.show(around: frame, width: config.focusBorderWidth, windowCornerRadius: config.windowCornerRadius,
-                         above: id)
+                         below: id)
     }
 
     /// The window's actual frame; a window resting in its tile shares the border with its tab strip.
