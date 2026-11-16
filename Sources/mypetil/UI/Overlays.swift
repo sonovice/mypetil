@@ -168,18 +168,37 @@ struct OverlayItemView: View {
 @MainActor
 final class FocusBorder {
     private let panel = ChromePanel(level: .normal, clickThrough: true)
-    private let view = BorderView()
+    private let ring = RingView()
+    /// The ring's distance to the panel's edges: leading, top, trailing, bottom.
+    private let insets: [NSLayoutConstraint]
 
     init() {
-        panel.contentView = view
+        let container = NSView()
+        panel.contentView = container
+        container.addSubview(ring)
+        ring.translatesAutoresizingMaskIntoConstraints = false
+        insets = [
+            ring.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            ring.topAnchor.constraint(equalTo: container.topAnchor),
+            container.trailingAnchor.constraint(equalTo: ring.trailingAnchor),
+            container.bottomAnchor.constraint(equalTo: ring.bottomAnchor),
+        ]
+        NSLayoutConstraint.activate(insets)
     }
 
     /// - Parameter window: The framed window; the border sits right below it, so the window's
     ///   shadow falls softly over it. Nil (gesture previews) puts it on top of everything.
     func show(around frame: CGRect, width: CGFloat, windowCornerRadius: CGFloat, animated: Bool = false,
               below window: CGWindowID? = nil) {
-        view.configure(lineWidth: width, windowCornerRadius: windowCornerRadius)
-        panel.setAXFrame(frame.insetBy(dx: -width, dy: -width), animated: animated && panel.isVisible)
+        ring.configure(lineWidth: width, windowCornerRadius: windowCornerRadius)
+        // Windows sit on whole points, the ring often does not (a 2.5 pt line): the panel takes
+        // the whole points around it and the ring keeps its exact position inside.
+        let exact = frame.insetBy(dx: -width, dy: -width)
+        let outer = exact.integral
+        let margins = [exact.minX - outer.minX, exact.minY - outer.minY,
+                       outer.maxX - exact.maxX, outer.maxY - exact.maxY]
+        for (constraint, margin) in zip(insets, margins) { constraint.constant = margin }
+        panel.setAXFrame(outer, animated: animated && panel.isVisible)
         if let window { panel.order(below: window) } else { panel.orderFrontRegardless() }
     }
 
@@ -187,13 +206,12 @@ final class FocusBorder {
 }
 
 /// A layer border: it follows the view's size on its own, also during frame animations.
-private final class BorderView: NSView {
+private final class RingView: NSView {
     static let color = NSColor.controlAccentColor
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        autoresizingMask = [.width, .height]
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
