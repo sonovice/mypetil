@@ -751,6 +751,11 @@ final class WindowManager {
         focusBorder.show(around: border, width: config.focusBorderWidth,
                          windowCornerRadius: config.windowCornerRadius, animated: planChanged)
         if planChanged { overlays.show(moveOverlays(session.id, plan: plan)) }
+        // After the other tiles, so the ghost stays on top of them.
+        if let w = windows[session.id] {
+            overlays.showGhost(OverlayItem(frame: border, style: plan?.isTab == true ? .tabTarget : .window,
+                                           title: w.displayTitle, icon: w.icon), animated: planChanged)
+        }
     }
 
     func endMove() {
@@ -851,16 +856,12 @@ final class WindowManager {
 
     // MARK: Gesture overlays
 
-    /// A preview tile (icon and title) for every tiled window on screen, at the frame it would
-    /// have after the drop, so the whole layout reads at a glance. The focus border marks the
-    /// landing spot itself; a hint is added when the window would become a tab.
+    /// A preview tile (icon and title) for every other tiled window on screen, at the frame it
+    /// would have after the drop, so the whole layout reads at a glance. The dragged window's
+    /// own tile is the ghost (see `updateMove`).
     private func moveOverlays(_ id: CGWindowID, plan: DropPlan?) -> [OverlayItem] {
-        guard let w = windows[id] else { return [] }
         let sourceWS = workspace(containing: id)
         var items: [OverlayItem] = []
-        if let plan, plan.isTab {
-            items.append(OverlayItem(frame: plan.preview, style: .tabTarget, title: w.displayTitle, icon: w.icon))
-        }
         for ws in workspaces {
             let layout: LayoutResult
             if let plan, ws === plan.workspace {
@@ -874,7 +875,7 @@ final class WindowManager {
             }
             for g in layout.groups where !g.windows.contains(id) {
                 guard let other = windows[g.activeWindow] else { continue }
-                items.append(OverlayItem(frame: g.frame, style: .affected, title: other.displayTitle, icon: other.icon))
+                items.append(OverlayItem(frame: g.frame, style: .window, title: other.displayTitle, icon: other.icon))
             }
         }
         return items
@@ -899,7 +900,7 @@ final class WindowManager {
             guard !g.windows.contains(id), let w = windows[g.activeWindow] else { return nil }
             let old = before.groups.first { $0.activeWindow == g.activeWindow }?.frame
             if let old, old.isClose(to: g.frame) { return nil }
-            return OverlayItem(frame: g.frame, style: .affected, title: w.displayTitle, icon: w.icon)
+            return OverlayItem(frame: g.frame, style: .window, title: w.displayTitle, icon: w.icon)
         }
     }
 

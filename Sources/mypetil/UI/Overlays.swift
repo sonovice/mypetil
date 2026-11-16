@@ -6,10 +6,10 @@ struct OverlayItem: Equatable {
     enum Style: Equatable {
         /// Where a resized window will end up.
         case target
-        /// A dragged window would join this tile as a tab (the focus border marks the tile).
+        /// A window shown as a tile with its icon and title.
+        case window
+        /// The dragged window over a tile it would join as a tab.
         case tabTarget
-        /// Another window that moves or changes size as a consequence.
-        case affected
     }
 
     /// AX coordinates.
@@ -47,13 +47,37 @@ final class OverlayController {
         }
     }
 
-    func hide() { show([]) }
+    func hide() {
+        show([])
+        hideGhost()
+    }
+
+    // MARK: Ghost
+
+    /// The dragged window's preview tile: glued to the mouse, then snapped onto its landing spot.
+    private lazy var ghost: (panel: ChromePanel, host: NSHostingView<OverlayItemView>) = {
+        let panel = ChromePanel(level: .popUpMenu, clickThrough: true)
+        let host = NSHostingView(rootView: OverlayItemView(item: nil))
+        panel.contentView = host
+        return (panel, host)
+    }()
+
+    func showGhost(_ item: OverlayItem, animated: Bool) {
+        let (panel, host) = ghost
+        if host.rootView.item?.style != item.style || host.rootView.item?.title != item.title {
+            host.rootView = OverlayItemView(item: item)
+        }
+        panel.setAXFrame(item.frame, animated: animated && panel.isVisible)
+        panel.orderFrontRegardless()
+    }
+
+    func hideGhost() { ghost.panel.orderOut(nil) }
 }
 
 private extension OverlayItem.Style {
     var zOrder: Int {
         switch self {
-        case .affected: 0
+        case .window: 0
         case .target, .tabTarget: 1
         }
     }
@@ -70,9 +94,7 @@ struct OverlayItemView: View {
                 case .target:
                     shape.fill(Color.accentColor.opacity(0.22))
                     shape.strokeBorder(Color.accentColor, lineWidth: 3)
-                case .tabTarget:
-                    shape.fill(Color.accentColor.opacity(0.12))
-                case .affected:
+                case .window, .tabTarget:
                     shape.fill(.ultraThinMaterial)
                     shape.strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1.5)
                 }
