@@ -828,7 +828,14 @@ final class WindowManager {
         let delta = CGVector(dx: point.x - session.startMouse.x, dy: point.y - session.startMouse.y)
         session.desired = session.edges.apply(to: session.startFrame, delta: delta).rounded
         gesture = .resize(session)
-        overlays.show(resizeOverlays(session))
+        // Like a move: every tile previewed, the resized window's own tile with the focus border.
+        let (frame, others) = resizePreview(session)
+        overlays.show(others)
+        if let w = windows[session.id] {
+            overlays.showGhost(OverlayItem(frame: frame, style: .window, title: w.displayTitle, icon: w.icon),
+                               animated: false)
+        }
+        focusBorder.show(around: frame, width: config.focusBorderWidth, windowCornerRadius: config.windowCornerRadius)
     }
 
     func endResize() {
@@ -911,10 +918,7 @@ final class WindowManager {
             } else {
                 layout = ws.layout
             }
-            for g in layout.groups where plan == nil || g.activeWindow != id {
-                guard let w = windows[g.activeWindow] else { continue }
-                items.append(OverlayItem(frame: g.frame, style: .window, title: w.displayTitle, icon: w.icon))
-            }
+            items += previewTiles(layout, excluding: plan == nil ? nil : id)
         }
         // A floating window has no tile; it is previewed where it is.
         if plan == nil, sourceWS == nil, case .move(let session) = gesture, let w = windows[id] {
@@ -923,25 +927,28 @@ final class WindowManager {
         return items
     }
 
-    private func resizeOverlays(_ session: ResizeSession) -> [OverlayItem] {
-        guard let w = windows[session.id] else { return [] }
-        guard let ws = session.workspace, ws.tree.contains(session.id) else {
-            return [OverlayItem(frame: session.desired, style: .target, title: w.displayTitle, icon: w.icon)]
+    /// Where the resized window would end up, and preview tiles for every other tiled window.
+    private func resizePreview(_ session: ResizeSession) -> (frame: CGRect, others: [OverlayItem]) {
+        var frame = session.desired
+        var items: [OverlayItem] = []
+        for ws in workspaces {
+            var layout = ws.layout
+            if ws === session.workspace, ws.tree.contains(session.id) {
+                let sim = ws.tree.copy()
+                sim.applyManualResize(of: session.id, from: session.startFrame, to: session.desired,
+                                      bounds: ws.tilingBounds, minSizes: minSizes, options: config.layoutOptions)
+                layout = sim.layout(in: ws.tilingBounds, minSizes: minSizes, options: config.layoutOptions)
+                frame = layout.group(containing: session.id)?.frame ?? frame
+            }
+            items += previewTiles(layout, excluding: session.id)
         }
-        let sim = ws.tree.copy()
-        sim.applyManualResize(of: session.id, from: session.startFrame, to: session.desired,
-                              bounds: ws.tilingBounds, minSizes: minSizes, options: config.layoutOptions)
-        let after = sim.layout(in: ws.tilingBounds, minSizes: minSizes, options: config.layoutOptions)
-        let frame = after.group(containing: session.id)?.frame ?? session.desired
-        return [OverlayItem(frame: frame, style: .target, title: w.displayTitle, icon: w.icon)]
-            + affectedOverlays(before: ws.layout, after: after, excluding: session.id)
+        return (frame, items)
     }
 
-    private func affectedOverlays(before: LayoutResult, after: LayoutResult, excluding id: CGWindowID) -> [OverlayItem] {
-        after.groups.compactMap { g in
-            guard !g.windows.contains(id), let w = windows[g.activeWindow] else { return nil }
-            let old = before.groups.first { $0.activeWindow == g.activeWindow }?.frame
-            if let old, old.isClose(to: g.frame) { return nil }
+    /// A preview tile (icon and title) for every tile of `layout` except the one showing `id`.
+    private func previewTiles(_ layout: LayoutResult, excluding id: CGWindowID?) -> [OverlayItem] {
+        layout.groups.compactMap { g in
+            guard g.activeWindow != id, let w = windows[g.activeWindow] else { return nil }
             return OverlayItem(frame: g.frame, style: .window, title: w.displayTitle, icon: w.icon)
         }
     }
@@ -974,8 +981,8 @@ final class WindowManager {
     /// Draws the focus border around where the focused window actually is right now, so it
     /// follows the window while it is dragged or resized, and also frames floating windows.
     private func updateFocusBorder() {
-        // During a move the border belongs to the drag (see `updateMove`).
-        if case .move = gesture { return }
+        // During a gesture the border belongs to the preview (see `updateMove`, `updateResize`).
+        if gesture != nil { return }
         guard config.showFocusBorder, let id = focusedID, let w = windows[id],
               !w.isMinimized, !parkedTabs.contains(id), !fullScreen.contains(id), !hiddenApps.contains(w.pid),
               isOnVisibleSpace(w), let frame = borderFrame(of: w) else {

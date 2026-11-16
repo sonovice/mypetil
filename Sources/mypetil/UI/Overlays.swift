@@ -4,8 +4,6 @@ import SwiftUI
 /// One rectangle drawn during a mouse gesture.
 struct OverlayItem: Equatable {
     enum Style: Equatable {
-        /// Where a resized window will end up.
-        case target
         /// A window shown as a tile with its icon and title.
         case window
         /// The dragged window over a tile it would join as a tab.
@@ -78,7 +76,7 @@ private extension OverlayItem.Style {
     var zOrder: Int {
         switch self {
         case .window: 0
-        case .target, .tabTarget: 1
+        case .tabTarget: 1
         }
     }
 }
@@ -90,14 +88,8 @@ struct OverlayItemView: View {
         if let item {
             let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
             ZStack {
-                switch item.style {
-                case .target:
-                    shape.fill(Color.accentColor.opacity(0.22))
-                    shape.strokeBorder(Color.accentColor, lineWidth: 3)
-                case .window, .tabTarget:
-                    shape.fill(.ultraThinMaterial)
-                    shape.strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1.5)
-                }
+                shape.fill(.ultraThinMaterial)
+                shape.strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1.5)
                 label(item)
             }
             .padding(2)
