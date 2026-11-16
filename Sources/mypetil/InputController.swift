@@ -60,6 +60,8 @@ final class InputController {
         let pass = Unmanaged.passUnretained(event)
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            // Events went by unseen, maybe the mouse-up ending the current gesture.
+            finishGestureOnceReleased()
             return pass
         }
         let point = event.location
@@ -79,7 +81,7 @@ final class InputController {
             }
             if flags == .maskAlternate, let id = Self.windowUnder(point), wm.isManaged(id) {
                 state = .moving(releaseAt: nil)
-                wm.beginMove(id, at: point)
+                wm.beginMove(id, at: point, windowFrame: wm.frame(of: id))
                 return nil
             }
             if flags.isEmpty, let id = Self.windowUnder(point), wm.isManaged(id), let frame = wm.frame(of: id) {
@@ -89,7 +91,7 @@ final class InputController {
         case (.leftMouseDragged, .tabPressed(let tab, let start)):
             if hypot(point.x - start.x, point.y - start.y) > 5 {
                 state = .moving(releaseAt: nil)
-                wm.beginMove(tab.window, at: start)
+                wm.beginMove(tab.window, at: start, windowFrame: wm.frame(of: tab.window))
                 wm.updateMove(at: point)
             }
             return nil
@@ -110,12 +112,12 @@ final class InputController {
 
         case (.leftMouseUp, .tabPressed(let tab, _)):
             state = .idle
-            if tab.isCloseButton { wm.close(tab.window) } else { wm.focus(tab.window) }
+            afterTap { [wm] in if tab.isCloseButton { wm.close(tab.window) } else { wm.focus(tab.window) } }
             return nil
 
         case (.leftMouseUp, .moving(let releaseAt)):
             state = .idle
-            wm.endMove()
+            afterTap { [wm] in wm.endMove() }
             return release(event, at: releaseAt)
 
         case (.leftMouseUp, .cancelled(let releaseAt)), (.rightMouseUp, .cancelled(let releaseAt)):
@@ -124,7 +126,7 @@ final class InputController {
 
         case (.leftMouseUp, .followingDrag):
             state = .idle
-            wm.endSystemDrag()
+            afterTap { [wm] in wm.endSystemDrag() }
 
         case (.leftMouseUp, .windowPressed):
             state = .idle
@@ -141,7 +143,7 @@ final class InputController {
 
         case (.rightMouseUp, .resizing(let releaseAt)), (.leftMouseUp, .resizing(let releaseAt)):
             state = .idle
-            wm.endResize()
+            afterTap { [wm] in wm.endResize() }
             return release(event, at: releaseAt)
 
         case (.keyDown, _):
@@ -157,7 +159,7 @@ final class InputController {
                 return nil
             }
             if flags == [.maskControl, .maskAlternate], let command = shortcut(for: key) {
-                if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { command() }
+                if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { afterTap(command) }
                 return nil
             }
 
@@ -165,6 +167,37 @@ final class InputController {
             break
         }
         return pass
+    }
+
+    /// Ends the current gesture as soon as the physical buttons are up. Asks the hardware
+    /// state: the session state does not see the button presses this tap swallows.
+    private func finishGestureOnceReleased() {
+        switch state {
+        case .moving, .resizing, .followingDrag, .cancelled: break
+        case .idle, .tabPressed, .windowPressed: return
+        }
+        let down = CGEventSource.buttonState(.hidSystemState, button: .left)
+            || CGEventSource.buttonState(.hidSystemState, button: .right)
+        guard !down else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                MainActor.assumeIsolated { self?.finishGestureOnceReleased() }
+            }
+            return
+        }
+        switch state {
+        case .moving: wm.endMove()
+        case .resizing: wm.endResize()
+        case .followingDrag: wm.endSystemDrag()
+        case .idle, .tabPressed, .windowPressed, .cancelled: break
+        }
+        state = .idle
+    }
+
+    /// Runs window-manager work that talks to apps (AX) after the callback has returned. A
+    /// callback that waits for a slow app gets the tap switched off by the system, and the
+    /// events in between — a mouse-up, say — never reach us.
+    private func afterTap(_ work: @escaping @MainActor () -> Void) {
+        DispatchQueue.main.async { MainActor.assumeIsolated(work) }
     }
 
     /// What ⌃⌥ + `key` does: mypetil's own commands first, then the user's launchers.
@@ -236,7 +269,7 @@ final class InputController {
     private func reset() {
         switch state {
         case .moving, .resizing: wm.cancelGesture()
-        case .followingDrag: wm.endSystemDrag()
+        case .followingDrag: afterTap { [wm] in wm.endSystemDrag() }
         case .idle, .tabPressed, .windowPressed, .cancelled: break
         }
         state = .idle

@@ -174,13 +174,13 @@ final class FocusBorder {
         panel.contentView = view
     }
 
-    /// - Parameter window: The framed window; the border sits right below it, so the window's
-    ///   shadow falls softly over it. Nil (gesture previews) puts it on top of everything.
+    /// - Parameter window: The framed window; the border sits right above it, so windows in
+    ///   front of that one stay in front. Nil (gesture previews) puts it on top of everything.
     func show(around frame: CGRect, width: CGFloat, windowCornerRadius: CGFloat, animated: Bool = false,
-              below window: CGWindowID? = nil) {
+              above window: CGWindowID? = nil) {
         view.configure(lineWidth: width, windowCornerRadius: windowCornerRadius)
         panel.setAXFrame(frame.insetBy(dx: -width, dy: -width), animated: animated && panel.isVisible)
-        if let window { panel.order(below: window) } else { panel.orderFrontRegardless() }
+        if let window { panel.order(above: window) } else { panel.orderFrontRegardless() }
     }
 
     func hide() { panel.orderOut(nil) }
@@ -188,6 +188,10 @@ final class FocusBorder {
 
 /// A layer border: it follows the view's size on its own, also during frame animations.
 private final class BorderView: NSView {
+    /// Slightly muted: as soft as the window's shadow made it look when lying over it, but
+    /// even on all sides.
+    static let color = NSColor.controlAccentColor.withAlphaComponent(0.7)
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
@@ -202,11 +206,11 @@ private final class BorderView: NSView {
         // The border is drawn inside the layer, so its inner edge has the window's radius:
         // the ring stays concentric with the window corner.
         layer.cornerRadius = windowCornerRadius + lineWidth
-        layer.borderColor = NSColor.controlAccentColor.cgColor
+        layer.borderColor = Self.color.cgColor
     }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        layer?.borderColor = NSColor.controlAccentColor.cgColor
+        layer?.borderColor = Self.color.cgColor
     }
 }
