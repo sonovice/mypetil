@@ -308,3 +308,25 @@ private func frame(_ w: WindowID, _ r: LayoutResult) -> CGRect? { r.group(contai
         #expect(g?.windowFrame == g?.frame)
     }
 }
+
+@Suite struct ResizeThirdsTests {
+    let f = CGRect(x: 100, y: 50, width: 900, height: 600)
+
+    @Test(arguments: [0.0, 0.1, 0.2, 0.33])
+    func wholeLeftThirdGrabsLeftEdge(nx: Double) {
+        let p = CGPoint(x: f.minX + f.width * nx, y: f.midY)
+        #expect(ResizeEdges.at(p, in: f) == [.left])
+    }
+
+    @Test(arguments: [0.67, 0.8, 0.99])
+    func wholeRightThirdGrabsRightEdge(nx: Double) {
+        let p = CGPoint(x: f.minX + f.width * nx, y: f.midY)
+        #expect(ResizeEdges.at(p, in: f) == [.right])
+    }
+
+    @Test(arguments: [0.0, 0.2, 0.33])
+    func wholeTopThirdGrabsTopEdge(ny: Double) {
+        let p = CGPoint(x: f.midX, y: f.minY + f.height * ny)
+        #expect(ResizeEdges.at(p, in: f) == [.top])
+    }
+}

@@ -13,12 +13,23 @@ struct TabStrip {
     let tabs: [Tab]
     let hasFocus: Bool
 
+    /// Width of the close button area at the trailing end of every tab.
+    static let closeButtonWidth: CGFloat = 24
+
     /// Tabs share the width equally, so hit testing is plain arithmetic.
-    func window(at point: CGPoint) -> CGWindowID? {
+    func hit(at point: CGPoint) -> TabHit? {
         guard frame.contains(point), !tabs.isEmpty else { return nil }
-        let index = Int((point.x - frame.minX) / (frame.width / CGFloat(tabs.count)))
-        return tabs[min(max(index, 0), tabs.count - 1)].window.id
+        let width = frame.width / CGFloat(tabs.count)
+        let index = min(max(Int((point.x - frame.minX) / width), 0), tabs.count - 1)
+        let tabMaxX = frame.minX + width * CGFloat(index + 1)
+        return TabHit(window: tabs[index].window.id, isCloseButton: point.x >= tabMaxX - Self.closeButtonWidth)
     }
+}
+
+/// What a click on a tab strip hit.
+struct TabHit {
+    let window: CGWindowID
+    let isCloseButton: Bool
 }
 
 /// Shows one panel per tab group. The panels only draw; clicks and drags on them are
@@ -47,8 +58,8 @@ final class TabBarController {
         }
     }
 
-    func window(at point: CGPoint) -> CGWindowID? {
-        strips.lazy.compactMap { $0.window(at: point) }.first
+    func hit(at point: CGPoint) -> TabHit? {
+        strips.lazy.compactMap { $0.hit(at: point) }.first
     }
 }
 
@@ -84,8 +95,16 @@ private struct TabView: View {
                 .font(.system(size: 11.5, weight: tab.isActive ? .semibold : .regular))
                 .lineLimit(1)
                 .truncationMode(.tail)
+            Spacer(minLength: 0)
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(tab.isActive ? .secondary : .tertiary)
+                .frame(width: 16, height: 16)
+                .background(Color.primary.opacity(tab.isActive ? 0.08 : 0), in: Circle())
+                .frame(width: TabStrip.closeButtonWidth - 4)
         }
-        .padding(.horizontal, 10)
+        .padding(.leading, 10)
+        .padding(.trailing, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .foregroundStyle(tab.isActive ? .primary : .secondary)
         .background {

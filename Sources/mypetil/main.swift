@@ -3,8 +3,9 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var wm: WindowManager?
-    private var mouse: MouseController?
-    private let hotkeys = Hotkeys()
+    private var input: InputController?
+    private let store = ConfigStore()
+    private lazy var settings = SettingsWindowController(store: store)
     private var statusItem: NSStatusItem?
     private var permissionTimer: Timer?
     private var signalSources: [DispatchSourceSignal] = []
@@ -30,14 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func launch() {
-        Config.writeDefaultIfMissing()
-        let wm = WindowManager(config: .load())
+        let wm = WindowManager(store: store)
         self.wm = wm
-        wm.start()
-        let mouse = MouseController(wm: wm)
-        if !mouse.start() { NSLog("mypetil: could not create mouse event tap") }
-        self.mouse = mouse
-        hotkeys.installDefaults(for: wm)
+        wm.start(openSettings: { [weak self] in self?.openSettings() })
+        let input = InputController(wm: wm)
+        if !input.start() { NSLog("mypetil: could not create the input event tap") }
+        self.input = input
         rebuildMenu()
     }
 
@@ -55,11 +54,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if wm == nil {
             menu.addItem(withTitle: "Wartet auf Bedienungshilfen-Zugriff …", action: nil, keyEquivalent: "")
         } else {
-            menu.addItem(item("Neu anordnen  (⌃⌥R)", #selector(retile)))
-            menu.addItem(item("Ausgleichen  (⌃⌥B)", #selector(balance)))
+            menu.addItem(item("Neu anordnen", #selector(retile)))
+            menu.addItem(item("Ausgleichen", #selector(balance)))
         }
         menu.addItem(.separator())
-        menu.addItem(item("Konfiguration öffnen", #selector(openConfig)))
+        menu.addItem(item("Einstellungen …", #selector(openSettings), key: ","))
         menu.addItem(.separator())
         menu.addItem(item("mypetil beenden", #selector(quit), key: "q"))
         statusItem?.menu = menu
@@ -75,10 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func balance() { wm?.balance() }
     @objc private func quit() { NSApp.terminate(nil) }
 
-    @objc private func openConfig() {
-        Config.writeDefaultIfMissing()
-        NSWorkspace.shared.open(Config.fileURL)
-    }
+    @objc private func openSettings() { settings.show() }
 
     /// Ctrl-C in the terminal must not leave parked tabs off-screen.
     private func installSignalHandlers() {

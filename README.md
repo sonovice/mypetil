@@ -5,30 +5,27 @@ Ein Tiling-Window-Manager für macOS mit Fensterleiste am linken Bildschirmrand,
 ## Funktionen
 
 - **Automatisches Tiling (BSP):** Ein neues Fenster halbiert das fokussierte Fenster, und zwar entlang der längeren Seite.
-- **⌥ + Linksklick-Ziehen** verschiebt ein Fenster. Ein Overlay zeigt die Zielposition, eine Live-Vorschau des Fensters gibt es nicht.
+- **⌥ + Linksklick-Ziehen** verschiebt ein Fenster. Das gezogene Fenster bekommt einen gestrichelten Rahmen und die Zielposition wird hervorgehoben. Alle Fenster, die dadurch ihren Platz ändern, zeigen eine Vorschau mit ihrem Titel. Eine Live-Vorschau des Fensterinhalts gibt es bewusst nicht.
   - Loslassen auf der linken, rechten, oberen oder unteren Hälfte eines Fensters halbiert dessen Platz.
   - Loslassen in der Mitte fügt das Fenster als **Tab** hinzu.
   - Funktioniert auch über Bildschirmgrenzen hinweg und mit schwebenden Fenstern (die dabei gekachelt werden).
   - <kbd>Esc</kbd> bricht den Vorgang ab.
-- **⌥ + Rechtsklick-Ziehen** ändert die Größe. Das Fenster ist dafür in ein 3×3-Raster eingeteilt: Eckfelder bewegen die Ecke, Kantenfelder die Kante, das Mittelfeld die nächste Ecke. Dabei werden die Split-Grenzen live mitgezogen.
-- **Tabs:** Ein Tab lässt sich in der Tab-Leiste anklicken oder herausziehen (dafür braucht es kein ⌥). Tabs werden nie verschachtelt. Ein herausgezogenes Tab wird wieder zu einem normalen Fenster, und eine Gruppe mit nur noch einem Fenster verliert ihre Tab-Leiste.
-- **Mindestgrößen werden respektiert:** Wenn ein Fenster nicht kleiner werden will, merkt sich mypetil diese Größe und vergibt den Platz neu. Passt die Summe aller Mindestgrößen nicht auf den Bildschirm, wird der Platz proportional verteilt.
-- **Seitenleiste** am linken Rand jedes Bildschirms. Sie zeigt alle Fenster mit Icon, Titel und App und stellt Tab-Gruppen eingerückt dar. Ein Klick fokussiert das Fenster, ein Rechtsklick öffnet ein Menü (Schweben, Minimieren, Schließen).
-- Das Ziehen an der Fensterkante (ganz normal, ohne ⌥) verschiebt ebenfalls die Split-Grenzen. Ein Fenster, das man an der Titelleiste verschoben hat, springt zurück auf seinen Platz.
+- **⌥ + Rechtsklick-Ziehen** ändert die Größe. Das Fenster ist dafür in Drittel eingeteilt: In einem Eckfeld bewegt sich die Ecke, in einem Kantenfeld die Kante und im Mittelfeld die nächste Ecke. Während des Ziehens sieht man nur die Vorschau mit allen betroffenen Fenstern. Umsortiert wird erst beim Loslassen.
+- **Fensterrand ziehen** (ganz normal, ohne ⌥) verschiebt die Split-Grenzen und die Nachbarn passen sich an. Ein Fenster, das man an der Titelleiste verschoben hat, springt zurück auf seinen Platz.
+- **Maximieren** per Doppelklick auf die Titelleiste, ⌥-Klick auf den grünen Knopf oder über das Kontextmenü der Seitenleiste: Das Fenster füllt dann die Kachelfläche. **Natives Vollbild** nimmt das Fenster aus dem Layout, und Seitenleiste und Overlays bleiben dort ausgeblendet.
+- **Tabs:** Ein Tab lässt sich anklicken, über das × schließen oder herausziehen (dafür braucht es kein ⌥). Tabs werden nie verschachtelt. Ein herausgezogenes Tab wird wieder zu einem normalen Fenster, und eine Gruppe mit nur noch einem Fenster verliert ihre Tab-Leiste.
+- **Fokus-Rahmen** um das aktive Fenster, abschaltbar.
+- **Mindestgrößen werden respektiert:** Wenn ein Fenster auch nach einem zweiten Versuch nicht kleiner werden will, merkt sich mypetil diese Größe und vergibt den Platz neu. Passt die Summe aller Mindestgrößen nicht auf den Bildschirm, wird der Platz proportional verteilt.
+- **Schreibtische (Spaces):** Jeder Schreibtisch hat auf jedem Bildschirm sein eigenes Layout. Fenster anderer Schreibtische bleiben in der Seitenleiste sichtbar.
+- **Seitenleiste** am linken Rand jedes Bildschirms im Stil einer Finder-Seitenleiste. Sie zeigt alle Fenster mit Icon, Titel und App und stellt Tab-Gruppen eingerückt dar. Die Breite lässt sich an der rechten Kante ziehen. Ein Klick fokussiert das Fenster, ein Rechtsklick öffnet ein Kontextmenü, und das Zahnrad unten öffnet die **Einstellungen**.
 
 ## Tastenkürzel
 
 | Kürzel | Aktion |
 |---|---|
-| ⌃⌥ H / J / K / L | Fokus links / unten / oben / rechts |
-| ⌃⌥⇧ H / J / K / L | Mit dem Nachbarn tauschen |
-| ⌃⌥ Tab / ⌃⌥⇧ Tab | Nächster / vorheriger Tab |
-| ⌃⌥ E | Split-Richtung umschalten |
-| ⌃⌥ F | Fenster schweben lassen / kacheln |
-| ⌃⌥ B | Alle Splits auf 50/50 |
-| ⌃⌥ R | Neu anordnen |
+| ⌃⌥ F | Fokussiertes Fenster schweben lassen / kacheln |
 
-Als Modifier dient ⌃⌥ statt nur ⌥, denn ⌥+Buchstabe erzeugt auf deutscher Tastatur Sonderzeichen (⌥L = @).
+Alles andere wird mit der Maus bedient.
 
 ## Bauen und starten
 
@@ -43,20 +40,11 @@ Zum Entwickeln geht auch `xcrun swift run`. Die Berechtigung gilt dann für das 
 
 > Hinweis: Mit `xcrun` wird die Xcode-Toolchain verwendet. Eine per swiftly installierte Toolchain passt nicht zum macOS-SDK von Xcode.
 
-## Konfiguration
+## Einstellungen
 
-`~/.config/mypetil/config.json` wird beim ersten Start angelegt. Alle Schlüssel sind optional:
+Die Einstellungen öffnest du über das Zahnrad in der Seitenleiste oder über ⌘, im Menüleisten-Symbol. Dort lassen sich Abstände, Fokus-Rahmen, Breite der Seitenleiste, Höhe der Tab-Leiste, Größe der Tab-Zone, schwebende Apps und der Start bei der Anmeldung festlegen. Änderungen wirken sofort.
 
-```json
-{
-  "gap": 8,
-  "outerGap": 8,
-  "sidebarWidth": 220,
-  "tabBarHeight": 28,
-  "centerZoneFraction": 0.4,
-  "floatingApps": ["com.apple.systempreferences", "com.apple.calculator"]
-}
-```
+Gespeichert wird alles in `~/.config/mypetil/config.json`.
 
 ## Architektur
 
@@ -66,10 +54,10 @@ Sources/MypetilCore/      reine Layout-Logik, ohne AppKit, vollständig getestet
   Geometry.swift            Drop-Zonen, Resize-Kanten
 Sources/mypetil/
   WindowManager.swift       Zustand und Orchestrierung: AX-Events → Baum → Fensterrahmen
-  MouseController.swift     CGEvent-Tap: ⌥-Drag, ⌥-Resize, Tab-Klicks
+  InputController.swift     CGEvent-Tap: ⌥-Drag, ⌥-Resize, Tab-Klicks, ⌃⌥F
+  Spaces.swift              Schreibtische (lesende SkyLight-Abfragen)
   AX/                       Accessibility-Wrapper und AXObserver je App
-  UI/                       Seitenleiste (SwiftUI), Tab-Leisten, Drop-Overlay
-  Hotkeys.swift             Carbon-Hotkeys
+  UI/                       Seitenleiste, Tab-Leisten, Overlays, Fokus-Rahmen, Einstellungen
 ```
 
 Der Baum speichert nur die **Absicht**, also Split-Achsen, Ratios und die Reihenfolge der Tabs. Die konkreten Rechtecke berechnet `layout(in:minSizes:)` bei jedem Durchlauf neu. Dabei setzen sich die Mindestgrößen gegenüber den Ratios durch. Schließt man das Fenster, das die Mindestgröße erzwungen hat, gilt wieder das gewünschte Verhältnis.
@@ -86,7 +74,6 @@ Der Baum speichert nur die **Absicht**, also Split-Achsen, Ratios und die Reihen
 
 ## Bekannte Einschränkungen / nächste Schritte
 
-- **Spaces:** mypetil verwaltet die Fenster, die macOS gerade meldet. Wie bei AeroSpace empfiehlt sich ein Space pro Bildschirm.
+- Ob ein Klick in der Seitenleiste auf ein Fenster eines anderen Schreibtischs dorthin wechselt, hängt von der macOS-Einstellung „Beim Wechseln zu einer App einen Space mit offenen Fenstern auswählen“ ab.
 - AX-Aufrufe laufen auf dem Main-Thread. Eine hängende App kann mypetil deshalb kurz ausbremsen. Ein Thread pro App wäre der nächste Schritt.
 - Die Mindestgrößen werden aus dem Verhalten der Fenster gelernt, denn macOS hat dafür keine öffentliche API. Beim ersten Platzieren kann ein Fenster deshalb kurz zu groß sein.
-- Tastenkürzel sind noch nicht konfigurierbar.

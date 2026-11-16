@@ -17,7 +17,8 @@ final class ChromePanel: NSPanel {
         isOpaque = false
         ignoresMouseEvents = clickThrough
         animationBehavior = .none
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        // No .fullScreenAuxiliary: chrome must stay out of native full-screen spaces.
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
     }
 
     override var canBecomeKey: Bool { false }

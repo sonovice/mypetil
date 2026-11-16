@@ -11,7 +11,9 @@ struct SidebarItem: Identifiable, Equatable {
     /// False for tabs hidden behind another tab of their group.
     let isActiveTab: Bool
     let isFloating: Bool
+    let isZoomed: Bool
     let isMinimized: Bool
+    let isFullScreen: Bool
 }
 
 /// One tile: a single window or a tab group.
@@ -21,17 +23,31 @@ struct SidebarGroup: Identifiable, Equatable {
     var isTabGroup: Bool { items.count > 1 }
 }
 
+/// Windows on another desktop of the same display.
+struct SpaceSection: Identifiable, Equatable {
+    let id: Spaces.ID
+    let title: String
+    let items: [SidebarItem]
+}
+
 struct SidebarContent: Equatable {
     var tiled: [SidebarGroup] = []
-    /// Floating, minimized and hidden windows.
+    /// Floating, minimized, hidden and full-screen windows.
     var other: [SidebarItem] = []
+    var otherSpaces: [SpaceSection] = []
+
+    var windowCount: Int { tiled.reduce(0) { $0 + $1.items.count } + other.count }
 }
 
 struct SidebarActions {
     var focus: (CGWindowID) -> Void = { _ in }
     var toggleFloating: (CGWindowID) -> Void = { _ in }
+    var toggleZoom: (CGWindowID) -> Void = { _ in }
     var minimize: (CGWindowID) -> Void = { _ in }
     var close: (CGWindowID) -> Void = { _ in }
+    var openSettings: () -> Void = {}
+    /// New width while dragging the edge; `final` on release.
+    var resize: (_ width: CGFloat, _ final: Bool) -> Void = { _, _ in }
 }
 
 @Observable
@@ -46,30 +62,48 @@ final class SidebarController {
     var actions = SidebarActions() {
         didSet { sidebars.values.forEach { $0.model.actions = actions } }
     }
-    private var sidebars: [CGDirectDisplayID: (panel: ChromePanel, model: SidebarModel)] = [:]
+    private var sidebars: [CGDirectDisplayID: Sidebar] = [:]
+    private var frames: [CGDirectDisplayID: CGRect] = [:]
 
-    func sync(_ workspaces: [Workspace]) {
+    private struct Sidebar {
+        let panel: ChromePanel
+        let model: SidebarModel
+        let handle: SidebarResizeHandle
+    }
+
+    func sync(_ workspaces: [Workspace], width: CGFloat) {
         let ids = Set(workspaces.map(\.displayID))
-        for (id, entry) in sidebars where !ids.contains(id) {
-            entry.panel.orderOut(nil)
+        for (id, sidebar) in sidebars where !ids.contains(id) {
+            sidebar.panel.orderOut(nil)
             sidebars[id] = nil
         }
         for ws in workspaces {
-            let entry = sidebars[ws.displayID] ?? makeSidebar()
-            sidebars[ws.displayID] = entry
-            entry.panel.setAXFrame(ws.sidebarFrame)
-            entry.panel.orderFrontRegardless()
+            let sidebar = sidebars[ws.displayID] ?? makeSidebar()
+            sidebars[ws.displayID] = sidebar
+            frames[ws.displayID] = ws.sidebarFrame
+            sidebar.handle.currentWidth = width
+            sidebar.panel.setAXFrame(ws.sidebarFrame)
+            sidebar.panel.orderFrontRegardless()
+        }
+    }
+
+    /// Resizes only the sidebars while the edge is being dragged; tiles follow on release.
+    func preview(width: CGFloat) {
+        for (id, sidebar) in sidebars {
+            guard var frame = frames[id] else { continue }
+            frame.size.width = width
+            sidebar.panel.setAXFrame(frame)
         }
     }
 
     func update(_ content: [CGDirectDisplayID: SidebarContent]) {
-        for (id, entry) in sidebars {
+        for (id, sidebar) in sidebars {
             let new = content[id] ?? SidebarContent()
-            if entry.model.content != new { entry.model.content = new }
+            if sidebar.model.content != new { sidebar.model.content = new }
         }
     }
 
-    private func makeSidebar() -> (panel: ChromePanel, model: SidebarModel) {
+    private func makeSidebar() -> Sidebar {
         let model = SidebarModel()
         model.actions = actions
         let panel = ChromePanel(level: .floating, clickThrough: false)
@@ -80,9 +114,59 @@ final class SidebarController {
         let host = FirstClickHostingView(rootView: SidebarView(model: model))
         host.autoresizingMask = [.width, .height]
         background.addSubview(host)
+        let handle = SidebarResizeHandle()
+        handle.onResize = { [weak self] width, final in self?.actions.resize(width, final) }
+        handle.autoresizingMask = [.minXMargin, .height]
+        background.addSubview(handle)
         panel.contentView = background
         host.frame = background.bounds
-        return (panel, model)
+        handle.frame = NSRect(x: background.bounds.maxX - SidebarResizeHandle.width, y: 0,
+                              width: SidebarResizeHandle.width, height: background.bounds.height)
+        return Sidebar(panel: panel, model: model, handle: handle)
+    }
+}
+
+/// The sidebar's right edge: a hairline separator that can be dragged to change the width.
+final class SidebarResizeHandle: NSView {
+    static let width: CGFloat = 6
+    var onResize: ((CGFloat, Bool) -> Void)?
+    var currentWidth: CGFloat = 220
+    private var dragStart: (mouseX: CGFloat, width: CGFloat)?
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.separatorColor.setFill()
+        NSRect(x: bounds.maxX - 1, y: 0, width: 1, height: bounds.height).fill()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        // .activeAlways: mypetil is a background app, its windows are never key.
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.activeAlways, .mouseEnteredAndExited, .mouseMoved,
+                                                               .cursorUpdate], owner: self))
+    }
+
+    override func cursorUpdate(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+    override func mouseEntered(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+    override func mouseMoved(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+    override func mouseExited(with event: NSEvent) { if dragStart == nil { NSCursor.arrow.set() } }
+
+    override func mouseDown(with event: NSEvent) {
+        dragStart = (NSEvent.mouseLocation.x, currentWidth)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let start = dragStart else { return }
+        NSCursor.resizeLeftRight.set()
+        onResize?(start.width + NSEvent.mouseLocation.x - start.mouseX, false)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard let start = dragStart else { return }
+        dragStart = nil
+        onResize?(start.width + NSEvent.mouseLocation.x - start.mouseX, true)
     }
 }
 
@@ -92,34 +176,55 @@ struct SidebarView: View {
     let model: SidebarModel
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 3) {
-                ForEach(model.content.tiled) { group in
-                    if group.isTabGroup {
-                        TabGroupRows(group: group, actions: model.actions)
-                    } else if let item = group.items.first {
-                        SidebarRow(item: item, actions: model.actions)
+        VStack(spacing: 0) {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 1) {
+                    SectionHeader("Fenster")
+                    ForEach(model.content.tiled) { group in
+                        if group.isTabGroup {
+                            TabGroupRows(group: group, actions: model.actions)
+                        } else if let item = group.items.first {
+                            SidebarRow(item: item, actions: model.actions)
+                        }
+                    }
+                    if !model.content.other.isEmpty {
+                        SectionHeader("Nicht gekachelt").padding(.top, 10)
+                        ForEach(model.content.other) { item in
+                            SidebarRow(item: item, actions: model.actions)
+                        }
+                    }
+                    ForEach(model.content.otherSpaces) { space in
+                        SectionHeader(space.title).padding(.top, 10)
+                        ForEach(space.items) { item in
+                            SidebarRow(item: item, actions: model.actions)
+                        }
                     }
                 }
-                if !model.content.other.isEmpty {
-                    Text("Nicht gekachelt")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .textCase(.uppercase)
-                        .padding(.top, 10)
-                        .padding(.leading, 8)
-                    ForEach(model.content.other) { item in
-                        SidebarRow(item: item, actions: model.actions)
-                    }
-                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 8)
+            Divider()
+            BottomBar(windowCount: model.content.windowCount, openSettings: model.actions.openSettings)
         }
     }
 }
 
-/// Tabs of one group: a light frame with a guide line, rows slightly indented.
+/// Finder-style section title.
+private struct SectionHeader: View {
+    let title: String
+    init(_ title: String) { self.title = title }
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.leading, 8)
+            .padding(.bottom, 3)
+            .padding(.top, 2)
+    }
+}
+
+/// Tabs of one group: indented below a thin guide line, like a disclosed outline item.
 private struct TabGroupRows: View {
     let group: SidebarGroup
     let actions: SidebarActions
@@ -130,15 +235,14 @@ private struct TabGroupRows: View {
                 SidebarRow(item: item, actions: actions)
             }
         }
-        .padding(.leading, 7)
+        .padding(.leading, 12)
         .overlay(alignment: .leading) {
-            Capsule()
+            RoundedRectangle(cornerRadius: 1)
                 .fill(Color.secondary.opacity(0.35))
                 .frame(width: 2)
-                .padding(.vertical, 6)
-                .padding(.leading, 2)
+                .padding(.vertical, 5)
+                .padding(.leading, 5)
         }
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .padding(.vertical, 2)
     }
 }
@@ -152,30 +256,32 @@ private struct SidebarRow: View {
         HStack(spacing: 8) {
             Image(nsImage: item.icon)
                 .resizable()
-                .frame(width: 20, height: 20)
+                .interpolation(.high)
+                .frame(width: 22, height: 22)
             VStack(alignment: .leading, spacing: 0) {
                 Text(item.title)
-                    .font(.system(size: 12, weight: item.isFocused ? .semibold : .regular))
+                    .font(.system(size: 13))
                     .lineLimit(1)
                     .truncationMode(.tail)
                 if item.title != item.appName {
                     Text(item.appName)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(item.isFocused ? AnyShapeStyle(.white.opacity(0.8)) : AnyShapeStyle(.secondary))
                         .lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
-            if item.isMinimized {
-                Image(systemName: "minus.circle").font(.system(size: 10)).foregroundStyle(.tertiary)
-            } else if item.isFloating {
-                Image(systemName: "macwindow.on.rectangle").font(.system(size: 10)).foregroundStyle(.tertiary)
+            if let badge {
+                Image(systemName: badge)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(item.isFocused ? AnyShapeStyle(.white.opacity(0.8)) : AnyShapeStyle(.tertiary))
             }
         }
-        .padding(.horizontal, 7)
+        .foregroundStyle(item.isFocused ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+        .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .opacity(item.isMinimized ? 0.5 : (item.isActiveTab ? 1 : 0.7))
+        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+        .opacity(item.isMinimized ? 0.5 : (item.isActiveTab || item.isFocused ? 1 : 0.75))
         .background(rowBackground, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
@@ -183,6 +289,9 @@ private struct SidebarRow: View {
         .help("\(item.title) — \(item.appName)")
         .contextMenu {
             Button("Fokussieren") { actions.focus(item.id) }
+            if !item.isFloating, !item.isMinimized, !item.isFullScreen {
+                Button(item.isZoomed ? "Maximierung aufheben" : "Maximieren") { actions.toggleZoom(item.id) }
+            }
             Button(item.isFloating ? "Kacheln" : "Schweben lassen") { actions.toggleFloating(item.id) }
             Button(item.isMinimized ? "Wiederherstellen" : "Minimieren") { actions.minimize(item.id) }
             Divider()
@@ -190,9 +299,41 @@ private struct SidebarRow: View {
         }
     }
 
+    private var badge: String? {
+        if item.isFullScreen { return "arrow.up.left.and.arrow.down.right" }
+        if item.isMinimized { return "minus" }
+        if item.isZoomed { return "plus.magnifyingglass" }
+        if item.isFloating { return "macwindow.on.rectangle" }
+        return nil
+    }
+
     private var rowBackground: Color {
-        if item.isFocused { return Color.accentColor.opacity(0.25) }
-        if hovering { return Color.primary.opacity(0.07) }
+        if item.isFocused { return .accentColor }
+        if hovering { return Color.primary.opacity(0.06) }
         return .clear
+    }
+}
+
+private struct BottomBar: View {
+    let windowCount: Int
+    let openSettings: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(windowCount == 1 ? "1 Fenster" : "\(windowCount) Fenster")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button(action: openSettings) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 13))
+                    .frame(width: 24, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .help("Einstellungen")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
     }
 }
