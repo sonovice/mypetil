@@ -841,8 +841,9 @@ final class WindowManager {
         guard let w = windows[id] else { return }
         settleWork.removeValue(forKey: id)?.cancel()
         touchedByUser.remove(id)
-        w.element.setPosition(windowFrame.origin)
         beginMove(id, at: point, windowFrame: windowFrame)
+        // AX calls can block on a busy app; keep them out of the event tap's callback.
+        DispatchQueue.main.async { w.element.setPosition(windowFrame.origin) }
     }
 
     /// The user started resizing a tiled window at its edge, and the event tap stopped the
@@ -852,8 +853,9 @@ final class WindowManager {
         guard let w = windows[id] else { return }
         settleWork.removeValue(forKey: id)?.cancel()
         touchedByUser.remove(id)
-        setFrame(w, windowFrame)
         _ = beginResize(id, at: point, edges: edges)
+        // AX calls can block on a busy app; keep them out of the event tap's callback.
+        DispatchQueue.main.async { [weak self] in self?.setFrame(w, windowFrame) }
     }
 
     /// A floating window being dragged or resized natively: the border follows the mouse
@@ -873,18 +875,18 @@ final class WindowManager {
     /// Starts resizing the window at `point` (⌥ + right mouse). Only a preview is shown
     /// until the button is released.
     func beginResize(_ id: CGWindowID, at point: CGPoint, edges grabbed: ResizeEdges? = nil) -> Bool {
-        guard let w = windows[id] else { return false }
+        guard windows[id] != nil else { return false }
         let ws = workspace(containing: id)
         if let ws, ws.zoomed == id {
             ws.zoomed = nil
             targetFrames.removeAll()
-            layoutNow()
+            setNeedsLayout()
         }
-        guard let frame = ws?.layout.group(containing: id)?.windowFrame ?? w.element.frame else { return false }
+        guard let frame = ws?.layout.group(containing: id)?.windowFrame ?? self.frame(of: id) else { return false }
         // The grabbed thirds follow what the user sees, which can differ from the tile
         // (e.g. a window larger than its tile because of its minimum size).
-        let visible = w.element.frame ?? frame
-        let session = ResizeSession(id: id, edges: grabbed ?? ResizeEdges.at(point, in: visible), startMouse: point,
+        let edges = grabbed ?? ResizeEdges.at(point, in: self.frame(of: id) ?? frame)
+        let session = ResizeSession(id: id, edges: edges, startMouse: point,
                                     startFrame: frame, workspace: ws, desired: frame)
         gesture = .resize(session)
         updateResize(at: point)
