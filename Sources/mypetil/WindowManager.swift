@@ -870,7 +870,8 @@ final class WindowManager {
         }
         tabBars.show(strips)
         if config.showFocusBorder, let focusFrame {
-            focusBorder.show(around: focusFrame, width: config.focusBorderWidth)
+            focusBorder.show(around: focusFrame, width: config.focusBorderWidth,
+                             windowCornerRadius: config.windowCornerRadius)
         } else {
             focusBorder.hide()
         }

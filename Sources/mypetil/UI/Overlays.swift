@@ -122,9 +122,12 @@ final class FocusBorder {
         panel.contentView = view
     }
 
-    func show(around frame: CGRect, width: CGFloat) {
-        view.lineWidth = width
-        view.needsDisplay = true
+    func show(around frame: CGRect, width: CGFloat, windowCornerRadius: CGFloat) {
+        if view.lineWidth != width || view.windowCornerRadius != windowCornerRadius {
+            view.lineWidth = width
+            view.windowCornerRadius = windowCornerRadius
+            view.needsDisplay = true
+        }
         panel.setAXFrame(frame.insetBy(dx: -width, dy: -width))
         panel.orderFrontRegardless()
     }
@@ -134,11 +137,14 @@ final class FocusBorder {
 
 private final class BorderView: NSView {
     var lineWidth: CGFloat = 2
+    var windowCornerRadius: CGFloat = 10
 
     override func draw(_ dirtyRect: NSRect) {
+        // The stroke's centre line runs lineWidth/2 outside the window edge, so its radius
+        // is the window's plus that distance: the ring stays concentric with the corner.
         let rect = bounds.insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
-        // macOS windows have ~10pt corners; follow them so the ring hugs the window.
-        let path = NSBezierPath(roundedRect: rect, xRadius: 10 + lineWidth / 2, yRadius: 10 + lineWidth / 2)
+        let radius = windowCornerRadius + lineWidth / 2
+        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
         path.lineWidth = lineWidth
         NSColor.controlAccentColor.setStroke()
         path.stroke()

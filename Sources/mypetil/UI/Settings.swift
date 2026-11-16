@@ -69,6 +69,11 @@ private struct GeneralPane: View {
                 ValueSlider(value: $store.config.focusBorderWidth, range: 1...6, step: 0.5, unit: "pt")
                     .disabled(!store.config.showFocusBorder)
             }
+            SettingsRow("Eckenradius:") {
+                ValueSlider(value: $store.config.windowCornerRadius, range: 0...30, step: 1, unit: "pt")
+                    .disabled(!store.config.showFocusBorder)
+                Hint("An die Rundung der Fensterecken anpassen, damit der Rahmen genau anliegt.")
+            }
             SettingsDivider()
             SettingsRow("Seitenleiste:") {
                 ValueSlider(value: $store.config.sidebarWidth, range: Config.sidebarWidthRange, step: 10, unit: "pt")

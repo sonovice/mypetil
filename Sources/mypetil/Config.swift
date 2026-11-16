@@ -15,6 +15,9 @@ struct Config: Codable, Equatable {
     /// Coloured frame around the focused window.
     var showFocusBorder = true
     var focusBorderWidth: CGFloat = 2.5
+    /// Corner radius of app windows, so the focus border hugs them. macOS 26 rounded
+    /// windows considerably; apps with a toolbar are rounder still.
+    var windowCornerRadius: CGFloat = Config.defaultWindowCornerRadius
     /// Share of a tile (per dimension) that counts as "middle" when dropping → tab.
     var centerZoneFraction: CGFloat = 0.4
     /// Bundle identifiers whose windows never get tiled.
@@ -26,6 +29,9 @@ struct Config: Codable, Equatable {
     ]
 
     static let currentVersion = 2
+    static let defaultWindowCornerRadius: CGFloat =
+        ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 26, minorVersion: 0, patchVersion: 0))
+            ? 16 : 10
     static let sidebarWidthRange: ClosedRange<CGFloat> = 150...420
 
     var layoutOptions: LayoutOptions {
@@ -80,6 +86,7 @@ extension Config {
         tabBarHeight = try c.decodeIfPresent(CGFloat.self, forKey: .tabBarHeight) ?? d.tabBarHeight
         showFocusBorder = try c.decodeIfPresent(Bool.self, forKey: .showFocusBorder) ?? d.showFocusBorder
         focusBorderWidth = try c.decodeIfPresent(CGFloat.self, forKey: .focusBorderWidth) ?? d.focusBorderWidth
+        windowCornerRadius = try c.decodeIfPresent(CGFloat.self, forKey: .windowCornerRadius) ?? d.windowCornerRadius
         centerZoneFraction = try c.decodeIfPresent(CGFloat.self, forKey: .centerZoneFraction) ?? d.centerZoneFraction
         floatingApps = try c.decodeIfPresent([String].self, forKey: .floatingApps) ?? d.floatingApps
     }
