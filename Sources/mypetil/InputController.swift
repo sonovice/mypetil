@@ -35,11 +35,7 @@ final class InputController {
 
     private let wm: WindowManager
     private var tap: CFMachPort?
-    private var state = State.idle {
-        didSet { updateWatchdog() }
-    }
-    /// Runs while a gesture is active, see `checkButtons`.
-    private var watchdog: Timer?
+    private var state = State.idle
 
     init(wm: WindowManager) {
         self.wm = wm
@@ -83,7 +79,7 @@ final class InputController {
             }
             if flags == .maskAlternate, let id = Self.windowUnder(point), wm.isManaged(id) {
                 state = .moving(releaseAt: nil)
-                wm.beginMove(id, at: point, windowFrame: wm.frame(of: id))
+                wm.beginMove(id, at: point)
                 return nil
             }
             if flags.isEmpty, let id = Self.windowUnder(point), wm.isManaged(id), let frame = wm.frame(of: id) {
@@ -93,7 +89,7 @@ final class InputController {
         case (.leftMouseDragged, .tabPressed(let tab, let start)):
             if hypot(point.x - start.x, point.y - start.y) > 5 {
                 state = .moving(releaseAt: nil)
-                wm.beginMove(tab.window, at: start, windowFrame: wm.frame(of: tab.window))
+                wm.beginMove(tab.window, at: start)
                 wm.updateMove(at: point)
             }
             return nil
@@ -228,42 +224,6 @@ final class InputController {
         wm.followSystemDrag(id, windowFrame: edges.apply(to: frame, delta: CGVector(dx: point.x - start.x,
                                                                                       dy: point.y - start.y)))
         return pass
-    }
-
-    // MARK: Watchdog
-
-    private var isInGesture: Bool {
-        switch state {
-        case .moving, .resizing, .followingDrag, .cancelled: true
-        case .idle, .tabPressed, .windowPressed: false
-        }
-    }
-
-    private func updateWatchdog() {
-        if isInGesture, watchdog == nil {
-            watchdog = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.checkButtons() }
-            }
-        } else if !isInGesture {
-            watchdog?.invalidate()
-            watchdog = nil
-        }
-    }
-
-    /// A mouse-up the tap never saw (it is switched off by the system when a callback takes
-    /// too long) would leave a gesture and its previews on screen. Once no button is down
-    /// any more, the gesture ends as if it had been released.
-    private func checkButtons() {
-        let left = CGEventSource.buttonState(.combinedSessionState, button: .left)
-        let right = CGEventSource.buttonState(.combinedSessionState, button: .right)
-        guard !left, !right else { return }
-        switch state {
-        case .moving: wm.endMove()
-        case .resizing: wm.endResize()
-        case .followingDrag: wm.endSystemDrag()
-        case .idle, .tabPressed, .windowPressed, .cancelled: break
-        }
-        state = .idle
     }
 
     /// Ends a gesture's mouse-up: swallowed, or handed to the app at `point`.
