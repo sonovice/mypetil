@@ -916,7 +916,7 @@ final class WindowManager {
             let items = ws.tree.windows.compactMap { id in
                 windows[id].map { item($0, isActiveTab: ws.tree.isActiveTab(id), isZoomed: ws.zoomed == id) }
             }
-            let title = ws.spaceNumber > 0 ? "Schreibtisch \(ws.spaceNumber)" : "Anderer Schreibtisch"
+            let title = ws.spaceNumber > 0 ? "Desktop \(ws.spaceNumber)" : "Anderer Desktop"
             content[ws.displayID]?.otherSpaces.append(SpaceSection(id: ws.key.spaceID, title: title, items: items))
         }
         let untiled = windows.values

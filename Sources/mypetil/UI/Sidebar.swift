@@ -35,8 +35,6 @@ struct SidebarContent: Equatable {
     /// Floating, minimized, hidden and full-screen windows.
     var other: [SidebarItem] = []
     var otherSpaces: [SpaceSection] = []
-
-    var windowCount: Int { tiled.reduce(0) { $0 + $1.items.count } + other.count }
 }
 
 struct SidebarActions {
@@ -179,7 +177,6 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 1) {
-                    SectionHeader("Fenster")
                     ForEach(model.content.tiled) { group in
                         if group.isTabGroup {
                             TabGroupRows(group: group, actions: model.actions)
@@ -204,7 +201,7 @@ struct SidebarView: View {
                 .padding(.vertical, 8)
             }
             Divider()
-            BottomBar(windowCount: model.content.windowCount, openSettings: model.actions.openSettings)
+            BottomBar(openSettings: model.actions.openSettings)
         }
     }
 }
@@ -315,14 +312,10 @@ private struct SidebarRow: View {
 }
 
 private struct BottomBar: View {
-    let windowCount: Int
     let openSettings: () -> Void
 
     var body: some View {
         HStack {
-            Text(windowCount == 1 ? "1 Fenster" : "\(windowCount) Fenster")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
             Spacer()
             Button(action: openSettings) {
                 Image(systemName: "gearshape")

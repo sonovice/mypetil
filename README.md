@@ -16,14 +16,14 @@ Ein Tiling-Window-Manager für macOS mit Fensterleiste am linken Bildschirmrand,
 - **Tabs:** Ein Tab lässt sich anklicken, über das × schließen oder herausziehen (dafür braucht es kein ⌥). Tabs werden nie verschachtelt. Ein herausgezogenes Tab wird wieder zu einem normalen Fenster, und eine Gruppe mit nur noch einem Fenster verliert ihre Tab-Leiste.
 - **Fokus-Rahmen** um das aktive Fenster, abschaltbar.
 - **Mindestgrößen werden respektiert:** Wenn ein Fenster auch nach einem zweiten Versuch nicht kleiner werden will, merkt sich mypetil diese Größe und vergibt den Platz neu. Passt die Summe aller Mindestgrößen nicht auf den Bildschirm, wird der Platz proportional verteilt.
-- **Schreibtische (Spaces):** Jeder Schreibtisch hat auf jedem Bildschirm sein eigenes Layout. Fenster anderer Schreibtische bleiben in der Seitenleiste sichtbar.
+- **Desktops (Spaces):** Jeder Desktop hat auf jedem Bildschirm sein eigenes Layout. Fenster anderer Desktops bleiben in der Seitenleiste sichtbar.
 - **Seitenleiste** am linken Rand jedes Bildschirms im Stil einer Finder-Seitenleiste. Sie zeigt alle Fenster mit Icon, Titel und App und stellt Tab-Gruppen eingerückt dar. Die Breite lässt sich an der rechten Kante ziehen. Ein Klick fokussiert das Fenster, ein Rechtsklick öffnet ein Kontextmenü, und das Zahnrad unten öffnet die **Einstellungen**.
 
 ## Tastenkürzel
 
 | Kürzel | Aktion |
 |---|---|
-| ⌃⌥ F | Fokussiertes Fenster schweben lassen / kacheln |
+| ⌃⌥ G | Fokussiertes Fenster schweben lassen / kacheln |
 
 Alles andere wird mit der Maus bedient.
 
@@ -54,8 +54,8 @@ Sources/MypetilCore/      reine Layout-Logik, ohne AppKit, vollständig getestet
   Geometry.swift            Drop-Zonen, Resize-Kanten
 Sources/mypetil/
   WindowManager.swift       Zustand und Orchestrierung: AX-Events → Baum → Fensterrahmen
-  InputController.swift     CGEvent-Tap: ⌥-Drag, ⌥-Resize, Tab-Klicks, ⌃⌥F
-  Spaces.swift              Schreibtische (lesende SkyLight-Abfragen)
+  InputController.swift     CGEvent-Tap: ⌥-Drag, ⌥-Resize, Tab-Klicks, ⌃⌥G
+  Spaces.swift              Desktops (lesende SkyLight-Abfragen)
   AX/                       Accessibility-Wrapper und AXObserver je App
   UI/                       Seitenleiste, Tab-Leisten, Overlays, Fokus-Rahmen, Einstellungen
 ```
@@ -74,6 +74,6 @@ Der Baum speichert nur die **Absicht**, also Split-Achsen, Ratios und die Reihen
 
 ## Bekannte Einschränkungen / nächste Schritte
 
-- Ob ein Klick in der Seitenleiste auf ein Fenster eines anderen Schreibtischs dorthin wechselt, hängt von der macOS-Einstellung „Beim Wechseln zu einer App einen Space mit offenen Fenstern auswählen“ ab.
+- Ob ein Klick in der Seitenleiste auf ein Fenster eines anderen Desktops dorthin wechselt, hängt von der macOS-Einstellung „Beim Wechseln zu einer App einen Space mit offenen Fenstern auswählen“ ab.
 - AX-Aufrufe laufen auf dem Main-Thread. Eine hängende App kann mypetil deshalb kurz ausbremsen. Ein Thread pro App wäre der nächste Schritt.
 - Die Mindestgrößen werden aus dem Verhalten der Fenster gelernt, denn macOS hat dafür keine öffentliche API. Beim ersten Platzieren kann ein Fenster deshalb kurz zu groß sein.

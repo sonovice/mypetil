@@ -161,7 +161,7 @@ private struct FloatingPane: View {
                 .overlay(alignment: .top) { Divider() }
             }
             .overlay(RoundedRectangle(cornerRadius: 0).stroke(Color(nsColor: .separatorColor)))
-            Hint("Einzelne Fenster schweben lassen: ⌃⌥F oder Rechtsklick in der Seitenleiste.")
+            Hint("Einzelne Fenster schweben lassen: ⌃⌥G oder Rechtsklick in der Seitenleiste.")
         }
     }
 
@@ -188,7 +188,7 @@ private struct ControlsPane: View {
             SettingsRow("Doppelklick Titelleiste:") { Text("Maximieren") }
             SettingsRow("Tab anklicken / ziehen:") { Text("Wechseln / herauslösen") }
             SettingsDivider()
-            SettingsRow("⌃⌥F:") { Text("Fenster schweben lassen / kacheln") }
+            SettingsRow("⌃⌥G:") { Text("Fenster schweben lassen / kacheln") }
         }
     }
 }

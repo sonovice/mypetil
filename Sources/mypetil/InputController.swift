@@ -9,7 +9,7 @@ import Carbon.HIToolbox
 ///   Only a preview is shown; the layout changes when the button is released.
 /// - Click on a tab strip: activate that tab (or close it via its ×). Drag a tab: move
 ///   that window, no ⌥ needed.
-/// - ⌃⌥F: float / tile the focused window. Esc cancels a gesture.
+/// - ⌃⌥G: float / tile the focused window. Esc cancels a gesture.
 ///
 /// Events belonging to these gestures are swallowed so the app below never sees them.
 @MainActor
@@ -118,9 +118,8 @@ final class InputController {
                 reset()
                 return nil
             }
-            if key == kVK_ANSI_F, flags == [.maskControl, .maskAlternate],
-               event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
-                wm.toggleFloating()
+            if key == kVK_ANSI_G, flags == [.maskControl, .maskAlternate] {
+                if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { wm.toggleFloating() }
                 return nil
             }
 

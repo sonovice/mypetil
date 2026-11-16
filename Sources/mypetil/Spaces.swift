@@ -10,7 +10,7 @@ private func CGSCopyManagedDisplaySpaces(_ cid: CGSConnectionID) -> Unmanaged<CF
 @_silgen_name("CGSCopySpacesForWindows")
 private func CGSCopySpacesForWindows(_ cid: CGSConnectionID, _ mask: Int32, _ windows: CFArray) -> Unmanaged<CFArray>?
 
-/// macOS Spaces ("Schreibtische"), as far as a window manager needs them.
+/// macOS Spaces ("Desktops"), as far as a window manager needs them.
 enum Spaces {
     typealias ID = UInt64
 
