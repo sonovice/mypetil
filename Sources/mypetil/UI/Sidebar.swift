@@ -65,11 +65,12 @@ final class SidebarController {
 
     private struct Sidebar {
         let panel: ChromePanel
+        let background: SidebarBackground
         let model: SidebarModel
         let handle: SidebarResizeHandle
     }
 
-    func sync(_ workspaces: [Workspace], width: CGFloat) {
+    func sync(_ workspaces: [Workspace], width: CGFloat, cornerRadius: CGFloat) {
         let ids = Set(workspaces.map(\.displayID))
         for (id, sidebar) in sidebars where !ids.contains(id) {
             sidebar.panel.orderOut(nil)
@@ -80,6 +81,7 @@ final class SidebarController {
             sidebars[ws.displayID] = sidebar
             frames[ws.displayID] = ws.sidebarFrame
             sidebar.handle.currentWidth = width
+            sidebar.background.cornerRadius = cornerRadius
             sidebar.panel.setAXFrame(ws.sidebarFrame)
             sidebar.panel.orderFrontRegardless()
         }
@@ -105,10 +107,7 @@ final class SidebarController {
         let model = SidebarModel()
         model.actions = actions
         let panel = ChromePanel(level: .floating, clickThrough: false)
-        let background = NSVisualEffectView()
-        background.material = .sidebar
-        background.blendingMode = .behindWindow
-        background.state = .active
+        let background = SidebarBackground()
         let host = FirstClickHostingView(rootView: SidebarView(model: model))
         host.autoresizingMask = [.width, .height]
         background.addSubview(host)
@@ -120,11 +119,45 @@ final class SidebarController {
         host.frame = background.bounds
         handle.frame = NSRect(x: background.bounds.maxX - SidebarResizeHandle.width, y: 0,
                               width: SidebarResizeHandle.width, height: background.bounds.height)
-        return Sidebar(panel: panel, model: model, handle: handle)
+        return Sidebar(panel: panel, background: background, model: model, handle: handle)
     }
 }
 
-/// The sidebar's right edge: a hairline separator that can be dragged to change the width.
+/// Sidebar material whose two corners away from the screen edge are rounded like app
+/// windows, with the same hairline outline.
+final class SidebarBackground: NSVisualEffectView {
+    var cornerRadius: CGFloat = 0 {
+        didSet { layer?.cornerRadius = cornerRadius }
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        material = .sidebar
+        blendingMode = .behindWindow
+        state = .active
+        wantsLayer = true
+        layer?.masksToBounds = true
+        // Right-hand corners; the left ones sit at the screen edge.
+        layer?.maskedCorners = [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+        layer?.borderWidth = 1
+        updateBorderColor()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateBorderColor()
+    }
+
+    private func updateBorderColor() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.borderColor = NSColor.separatorColor.cgColor
+        }
+    }
+}
+
+/// The sidebar's right edge, which can be dragged to change the width.
 final class SidebarResizeHandle: NSView {
     static let width: CGFloat = 6
     var onResize: ((CGFloat, Bool) -> Void)?
@@ -132,11 +165,6 @@ final class SidebarResizeHandle: NSView {
     private var dragStart: (mouseX: CGFloat, width: CGFloat)?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.separatorColor.setFill()
-        NSRect(x: bounds.maxX - 1, y: 0, width: 1, height: bounds.height).fill()
-    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()

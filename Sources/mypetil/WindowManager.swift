@@ -353,7 +353,7 @@ final class WindowManager {
             }
         }
         targetFrames.removeAll()
-        sidebars.sync(workspaces, width: config.sidebarWidth)
+        sidebars.sync(workspaces, width: config.sidebarWidth, cornerRadius: config.windowCornerRadius)
         setNeedsLayout()
     }
 
