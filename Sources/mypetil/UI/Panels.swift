@@ -22,6 +22,10 @@ final class ChromePanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
     }
 
+    /// AppKit pushes windows out of the menu bar when they are ordered in. Chrome must stay
+    /// exactly where it is put: a focus border around a window at the top reaches into it.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
