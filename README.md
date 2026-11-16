@@ -5,7 +5,7 @@ Ein Tiling-Window-Manager für macOS mit Fensterleiste am linken Bildschirmrand,
 ## Funktionen
 
 - **Automatisches Tiling (BSP):** Ein neues Fenster halbiert das fokussierte Fenster, und zwar entlang der längeren Seite.
-- **⌥ + Linksklick-Ziehen** verschiebt ein Fenster. Das gezogene Fenster bekommt einen gestrichelten Rahmen und die Zielposition wird hervorgehoben. Alle Fenster, die dadurch ihren Platz ändern, zeigen eine Vorschau mit ihrem Titel. Eine Live-Vorschau des Fensterinhalts gibt es bewusst nicht.
+- **⌥ + Linksklick-Ziehen** verschiebt ein Fenster. Der Fokus-Rahmen wandert mit der Maus und schrumpft auf die Zielfläche, sobald man über einem Fenster ist. Alle Fenster, die dadurch ihre Größe ändern, zeigen eine Vorschau mit ihrem Titel. Eine Live-Vorschau des Fensterinhalts gibt es bewusst nicht.
   - Loslassen auf der linken, rechten, oberen oder unteren Hälfte eines Fensters halbiert dessen Platz.
   - Loslassen in der Mitte fügt das Fenster als **Tab** hinzu.
   - Funktioniert auch über Bildschirmgrenzen hinweg und mit schwebenden Fenstern (die dabei gekachelt werden).

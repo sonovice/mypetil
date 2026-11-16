@@ -67,14 +67,14 @@ final class InputController {
             }
             if flags == .maskAlternate, let id = Self.windowUnder(point), wm.isManaged(id) {
                 state = .moving
-                wm.beginMove(id)
+                wm.beginMove(id, at: point)
                 return nil
             }
 
         case (.leftMouseDragged, .tabPressed(let tab, let start)):
             if hypot(point.x - start.x, point.y - start.y) > 5 {
                 state = .moving
-                wm.beginMove(tab.window)
+                wm.beginMove(tab.window, at: start)
                 wm.updateMove(at: point)
             }
             return nil

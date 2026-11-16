@@ -175,6 +175,8 @@ final class WindowManager {
         observers[pid]?.watch(element, id: id)
         if element.bool(AXAttr.fullScreen) == true { fullScreen.insert(id) }
         if isTileable(w) { tile(w) }
+        // The focus notification of a new window often arrives before we know the window.
+        if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { updateFocus(pid) }
         setNeedsUI()
     }
 
@@ -705,8 +707,16 @@ final class WindowManager {
     // MARK: - Mouse gestures
 
     private enum Gesture {
-        case move(CGWindowID, plan: DropPlan?)
+        case move(MoveSession)
         case resize(ResizeSession)
+    }
+
+    private struct MoveSession {
+        let id: CGWindowID
+        let startMouse: CGPoint
+        /// What the focus border framed when the drag began (tile incl. tab strip, or the window).
+        let startFrame: CGRect
+        var plan: DropPlan?
     }
 
     private struct ResizeSession {
@@ -720,25 +730,32 @@ final class WindowManager {
 
     func isManaged(_ id: CGWindowID) -> Bool { windows[id] != nil }
 
-    /// Starts dragging `id` (⌥ + left mouse, or a tab pulled out of its strip).
-    func beginMove(_ id: CGWindowID) {
-        guard windows[id] != nil else { return }
-        gesture = .move(id, plan: nil)
-        overlays.show(moveOverlays(id, plan: nil))
+    /// Starts dragging `id` (⌥ + left mouse, or a tab pulled out of its strip) grabbed at `point`.
+    /// The window itself stays put; the focus border travels with the mouse and snaps onto
+    /// the landing spot, and windows that would change size show their new frame.
+    func beginMove(_ id: CGWindowID, at point: CGPoint) {
+        guard let w = windows[id], let frame = borderFrame(of: w) else { return }
+        gesture = .move(MoveSession(id: id, startMouse: point, startFrame: frame))
+        updateMove(at: point)
     }
 
     func updateMove(at point: CGPoint) {
-        guard case .move(let id, let old) = gesture else { return }
-        let plan = dropPlan(for: id, at: point)
-        guard plan != old else { return }
-        gesture = .move(id, plan: plan)
-        overlays.show(moveOverlays(id, plan: plan))
+        guard case .move(var session) = gesture else { return }
+        let plan = dropPlan(for: session.id, at: point)
+        let planChanged = plan != session.plan
+        session.plan = plan
+        gesture = .move(session)
+        let border = plan?.preview ?? session.startFrame.offsetBy(dx: point.x - session.startMouse.x,
+                                                                  dy: point.y - session.startMouse.y)
+        focusBorder.show(around: border, width: config.focusBorderWidth,
+                         windowCornerRadius: config.windowCornerRadius, animated: planChanged)
+        if planChanged { overlays.show(moveOverlays(session.id, plan: plan)) }
     }
 
     func endMove() {
-        guard case .move(let id, let plan) = gesture else { return }
+        guard case .move(let session) = gesture else { return }
         cancelGesture()
-        if let plan { performDrop(id, plan: plan) }
+        if let plan = session.plan { performDrop(session.id, plan: plan) }
     }
 
     /// Starts resizing the window at `point` (⌥ + right mouse). Only a preview is shown
@@ -786,6 +803,7 @@ final class WindowManager {
     func cancelGesture() {
         gesture = nil
         overlays.hide()
+        updateFocusBorder()
     }
 
     /// Where `id` would land if released at `point`; nil if nothing would change.
@@ -832,17 +850,15 @@ final class WindowManager {
 
     // MARK: Gesture overlays
 
-    /// The dragged window (dashed), its landing spot, and every window that moves as a result.
+    /// Every window that changes size as a result of the drop (the focus border marks the
+    /// landing spot itself), plus a hint when the window would become a tab.
     private func moveOverlays(_ id: CGWindowID, plan: DropPlan?) -> [OverlayItem] {
-        guard let w = windows[id] else { return [] }
+        guard let w = windows[id], let plan else { return [] }
         var items: [OverlayItem] = []
         let sourceWS = workspace(containing: id)
-        if let frame = sourceWS?.layout.group(containing: id)?.frame ?? w.element.frame {
-            items.append(OverlayItem(frame: frame, style: .source, title: w.displayTitle, icon: w.icon))
+        if plan.isTab {
+            items.append(OverlayItem(frame: plan.preview, style: .tabTarget, title: w.displayTitle, icon: w.icon))
         }
-        guard let plan else { return items }
-        items.append(OverlayItem(frame: plan.preview, style: plan.isTab ? .tabTarget : .target,
-                                 title: w.displayTitle, icon: w.icon))
         items += affectedOverlays(before: plan.workspace.layout, after: plan.result, excluding: id)
         if let sourceWS, sourceWS !== plan.workspace {
             let sim = sourceWS.tree.copy()
@@ -904,19 +920,25 @@ final class WindowManager {
     /// Draws the focus border around where the focused window actually is right now, so it
     /// follows the window while it is dragged or resized, and also frames floating windows.
     private func updateFocusBorder() {
+        // During a move the border belongs to the drag (see `updateMove`).
+        if case .move = gesture { return }
         guard config.showFocusBorder, let id = focusedID, let w = windows[id],
               !w.isMinimized, !parkedTabs.contains(id), !fullScreen.contains(id), !hiddenApps.contains(w.pid),
-              isOnVisibleSpace(w), let actual = w.element.frame else {
+              isOnVisibleSpace(w), let frame = borderFrame(of: w) else {
             focusBorder.hide()
             return
         }
-        var frame = actual
-        // A window resting in its tile shares the border with its tab strip.
-        if let ws = workspace(containing: id), ws.zoomed != id, let g = ws.layout.group(containing: id),
-           g.tabBarFrame != nil, actual.isClose(to: g.windowFrame, tolerance: 4) {
-            frame = g.frame
-        }
         focusBorder.show(around: frame, width: config.focusBorderWidth, windowCornerRadius: config.windowCornerRadius)
+    }
+
+    /// The window's actual frame; a window resting in its tile shares the border with its tab strip.
+    private func borderFrame(of w: ManagedWindow) -> CGRect? {
+        guard let actual = w.element.frame else { return nil }
+        if let ws = workspace(containing: w.id), ws.zoomed != w.id, let g = ws.layout.group(containing: w.id),
+           g.tabBarFrame != nil, actual.isClose(to: g.windowFrame, tolerance: 4) {
+            return g.frame
+        }
+        return actual
     }
 
     private func isOnVisibleSpace(_ w: ManagedWindow) -> Bool {

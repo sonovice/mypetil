@@ -25,9 +25,16 @@ final class ChromePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     /// Positions the panel using AX coordinates.
-    func setAXFrame(_ rect: CGRect) {
+    func setAXFrame(_ rect: CGRect, animated: Bool = false) {
         let target = Screens.toCocoa(rect)
-        if frame != target { setFrame(target, display: true) }
+        guard frame != target else { return }
+        // Always through the animator: an immediate move (duration 0) also replaces an
+        // animation still in flight, which a plain setFrame would not.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = animated ? 0.12 : 0
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            animator().setFrame(target, display: true)
+        }
     }
 }
 

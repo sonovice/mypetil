@@ -4,11 +4,9 @@ import SwiftUI
 /// One rectangle drawn during a mouse gesture.
 struct OverlayItem: Equatable {
     enum Style: Equatable {
-        /// The window being dragged or resized, where it is now.
-        case source
-        /// Where the window will end up.
+        /// Where a resized window will end up.
         case target
-        /// Where the window will end up, as a new tab.
+        /// A dragged window would join this tile as a tab (the focus border marks the tile).
         case tabTarget
         /// Another window that moves or changes size as a consequence.
         case affected
@@ -56,8 +54,7 @@ private extension OverlayItem.Style {
     var zOrder: Int {
         switch self {
         case .affected: 0
-        case .source: 1
-        case .target, .tabTarget: 2
+        case .target, .tabTarget: 1
         }
     }
 }
@@ -70,19 +67,16 @@ struct OverlayItemView: View {
             let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
             ZStack {
                 switch item.style {
-                case .source:
-                    shape.fill(Color.black.opacity(0.12))
-                    shape.strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [9, 5]))
-                case .target, .tabTarget:
+                case .target:
                     shape.fill(Color.accentColor.opacity(0.22))
                     shape.strokeBorder(Color.accentColor, lineWidth: 3)
+                case .tabTarget:
+                    shape.fill(Color.accentColor.opacity(0.12))
                 case .affected:
                     shape.fill(.ultraThinMaterial)
                     shape.strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1.5)
                 }
-                if item.style != .source {
-                    label(item)
-                }
+                label(item)
             }
             .padding(2)
         }
@@ -112,7 +106,8 @@ struct OverlayItemView: View {
     }
 }
 
-/// Coloured frame around the focused tiled window, drawn in the gap just outside it.
+/// Coloured frame around the focused window, drawn just outside it. While a window is
+/// dragged with ⌥ it travels with the mouse and snaps onto the landing spot.
 @MainActor
 final class FocusBorder {
     private let panel = ChromePanel(level: .normal, clickThrough: true)
@@ -122,31 +117,36 @@ final class FocusBorder {
         panel.contentView = view
     }
 
-    func show(around frame: CGRect, width: CGFloat, windowCornerRadius: CGFloat) {
-        if view.lineWidth != width || view.windowCornerRadius != windowCornerRadius {
-            view.lineWidth = width
-            view.windowCornerRadius = windowCornerRadius
-            view.needsDisplay = true
-        }
-        panel.setAXFrame(frame.insetBy(dx: -width, dy: -width))
+    func show(around frame: CGRect, width: CGFloat, windowCornerRadius: CGFloat, animated: Bool = false) {
+        view.configure(lineWidth: width, windowCornerRadius: windowCornerRadius)
+        panel.setAXFrame(frame.insetBy(dx: -width, dy: -width), animated: animated && panel.isVisible)
         panel.orderFrontRegardless()
     }
 
     func hide() { panel.orderOut(nil) }
 }
 
+/// A layer border: it follows the view's size on its own, also during frame animations.
 private final class BorderView: NSView {
-    var lineWidth: CGFloat = 2
-    var windowCornerRadius: CGFloat = 10
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        autoresizingMask = [.width, .height]
+    }
 
-    override func draw(_ dirtyRect: NSRect) {
-        // The stroke's centre line runs lineWidth/2 outside the window edge, so its radius
-        // is the window's plus that distance: the ring stays concentric with the corner.
-        let rect = bounds.insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
-        let radius = windowCornerRadius + lineWidth / 2
-        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-        path.lineWidth = lineWidth
-        NSColor.controlAccentColor.setStroke()
-        path.stroke()
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    func configure(lineWidth: CGFloat, windowCornerRadius: CGFloat) {
+        guard let layer else { return }
+        layer.borderWidth = lineWidth
+        // The border is drawn inside the layer, so its inner edge has the window's radius:
+        // the ring stays concentric with the window corner.
+        layer.cornerRadius = windowCornerRadius + lineWidth
+        layer.borderColor = NSColor.controlAccentColor.cgColor
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        layer?.borderColor = NSColor.controlAccentColor.cgColor
     }
 }
