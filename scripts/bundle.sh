@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Builds build/mypetil.app (menu-bar only, no Dock icon).
-# An app bundle keeps a stable identity for the Accessibility permission;
-# `swift run` would attribute the permission to your terminal instead.
+#
+# macOS ties the Accessibility permission to the code signature. An ad-hoc signature
+# is just a hash of the binary, so every rebuild would look like a new app and the
+# permission would silently stop working. Signing with a real certificate keeps the
+# identity stable across rebuilds. Override with MYPETIL_SIGN_IDENTITY=<name or hash>.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -26,5 +29,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-codesign --force --sign - "$APP"
+IDENTITY="${MYPETIL_SIGN_IDENTITY:-$(security find-identity -v -p codesigning \
+    | awk '/"Apple Development:/ { print $2; exit }')}"
+if [[ -z "$IDENTITY" ]]; then
+    echo "warning: no signing certificate found, signing ad-hoc." >&2
+    echo "         The Accessibility permission must be re-granted after every rebuild." >&2
+    IDENTITY="-"
+fi
+codesign --force --sign "$IDENTITY" "$APP"
 echo "Built $APP"
