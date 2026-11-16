@@ -13,8 +13,9 @@ struct TabStrip {
     let tabs: [Tab]
     let hasFocus: Bool
 
-    /// Width of the close button area at the trailing end of every tab.
-    static let closeButtonWidth: CGFloat = 24
+    /// Diameter of a tab's close button. It sits at the trailing end, as far from the tab's
+    /// edge as from the strip's top and bottom, in a square hit area as tall as the strip.
+    static let closeButtonSize: CGFloat = 18
 
     /// Tabs share the width equally, so hit testing is plain arithmetic.
     func hit(at point: CGPoint) -> TabHit? {
@@ -22,7 +23,7 @@ struct TabStrip {
         let width = frame.width / CGFloat(tabs.count)
         let index = min(max(Int((point.x - frame.minX) / width), 0), tabs.count - 1)
         let tabMaxX = frame.minX + width * CGFloat(index + 1)
-        return TabHit(window: tabs[index].window.id, isCloseButton: point.x >= tabMaxX - Self.closeButtonWidth)
+        return TabHit(window: tabs[index].window.id, isCloseButton: point.x >= tabMaxX - frame.height)
     }
 }
 
@@ -51,7 +52,7 @@ final class TabBarController {
             if i < strips.count {
                 entry.host.rootView = TabStripView(strip: strips[i])
                 entry.panel.setAXFrame(strips[i].frame)
-                entry.panel.orderFrontRegardless()
+                entry.panel.order(above: strips[i].tabs.first(where: \.isActive)?.window.id)
             } else {
                 entry.panel.orderOut(nil)
             }
@@ -72,7 +73,7 @@ struct TabStripView: View {
                 let width = geo.size.width / CGFloat(max(strip.tabs.count, 1))
                 HStack(spacing: 0) {
                     ForEach(strip.tabs, id: \.window.id) { tab in
-                        TabView(tab: tab, groupHasFocus: strip.hasFocus)
+                        TabView(tab: tab, groupHasFocus: strip.hasFocus, height: geo.size.height)
                             .frame(width: width, height: geo.size.height)
                     }
                 }
@@ -85,6 +86,7 @@ struct TabStripView: View {
 private struct TabView: View {
     let tab: TabStrip.Tab
     let groupHasFocus: Bool
+    let height: CGFloat
 
     var body: some View {
         HStack(spacing: 6) {
@@ -99,12 +101,12 @@ private struct TabView: View {
             Image(systemName: "xmark")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(tab.isActive ? .secondary : .tertiary)
-                .frame(width: 18, height: 18)
+                .frame(width: TabStrip.closeButtonSize, height: TabStrip.closeButtonSize)
                 .background(Color.primary.opacity(tab.isActive ? 0.08 : 0), in: Circle())
-                .frame(width: TabStrip.closeButtonWidth - 4)
         }
         .padding(.leading, 10)
-        .padding(.trailing, 4)
+        // Same distance to the tab's right edge as to the strip's top and bottom.
+        .padding(.trailing, max(0, (height - TabStrip.closeButtonSize) / 2))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .foregroundStyle(tab.isActive ? .primary : .secondary)
         .background {

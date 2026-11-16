@@ -32,13 +32,15 @@ struct OverlayItem: Equatable {
 final class OverlayController {
     private var pool: [(panel: ChromePanel, host: NSHostingView<OverlayItemView>)] = []
     private var shown: [OverlayItem] = []
+    /// Corner radius of app windows, so previews have the same shape as the windows.
+    var cornerRadius: CGFloat = 10
 
     func show(_ items: [OverlayItem]) {
         guard items != shown else { return }
         shown = items
         while pool.count < items.count {
             let panel = ChromePanel(level: .popUpMenu, clickThrough: true)
-            let host = NSHostingView(rootView: OverlayItemView(item: nil))
+            let host = NSHostingView(rootView: OverlayItemView(item: nil, cornerRadius: 0))
             panel.contentView = host
             pool.append((panel, host))
         }
@@ -46,7 +48,7 @@ final class OverlayController {
         let ordered = items.sorted { $0.style.zOrder < $1.style.zOrder }
         for (i, entry) in pool.enumerated() {
             if i < ordered.count {
-                entry.host.rootView = OverlayItemView(item: ordered[i])
+                entry.host.rootView = OverlayItemView(item: ordered[i], cornerRadius: cornerRadius)
                 entry.panel.setAXFrame(ordered[i].frame)
                 entry.panel.orderFrontRegardless()
             } else {
@@ -65,7 +67,7 @@ final class OverlayController {
     /// The dragged window's preview tile: glued to the mouse, then snapped onto its landing spot.
     private lazy var ghost: (panel: ChromePanel, host: NSHostingView<OverlayItemView>) = {
         let panel = ChromePanel(level: .popUpMenu, clickThrough: true)
-        let host = NSHostingView(rootView: OverlayItemView(item: nil))
+        let host = NSHostingView(rootView: OverlayItemView(item: nil, cornerRadius: 0))
         panel.contentView = host
         return (panel, host)
     }()
@@ -74,7 +76,7 @@ final class OverlayController {
         let (panel, host) = ghost
         if host.rootView.item?.style != item.style || host.rootView.item?.tabs != item.tabs
             || host.rootView.item?.activeIndex != item.activeIndex {
-            host.rootView = OverlayItemView(item: item)
+            host.rootView = OverlayItemView(item: item, cornerRadius: cornerRadius)
         }
         panel.setAXFrame(item.frame, animated: animated && panel.isVisible)
         panel.orderFrontRegardless()
@@ -94,10 +96,12 @@ private extension OverlayItem.Style {
 
 struct OverlayItemView: View {
     let item: OverlayItem?
+    let cornerRadius: CGFloat
 
     var body: some View {
         if let item {
-            let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+            // Exactly the window's frame and corner shape.
+            let shape = RoundedRectangle(cornerRadius: cornerRadius)
             ZStack {
                 shape.fill(.ultraThinMaterial)
                 shape.strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1.5)
@@ -106,7 +110,6 @@ struct OverlayItemView: View {
                     label(item).frame(maxHeight: .infinity)
                 }
             }
-            .padding(2)
         }
     }
 
@@ -169,10 +172,13 @@ final class FocusBorder {
         panel.contentView = view
     }
 
-    func show(around frame: CGRect, width: CGFloat, windowCornerRadius: CGFloat, animated: Bool = false) {
+    /// - Parameter window: The framed window; the border sits right above it. Nil (gesture
+    ///   previews) puts it on top of everything.
+    func show(around frame: CGRect, width: CGFloat, windowCornerRadius: CGFloat, animated: Bool = false,
+              above window: CGWindowID? = nil) {
         view.configure(lineWidth: width, windowCornerRadius: windowCornerRadius)
         panel.setAXFrame(frame.insetBy(dx: -width, dy: -width), animated: animated && panel.isVisible)
-        panel.orderFrontRegardless()
+        panel.order(above: window)
     }
 
     func hide() { panel.orderOut(nil) }

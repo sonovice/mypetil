@@ -29,6 +29,7 @@ final class SettingsWindowController {
         tabs.addTabViewItem(pane("Tastatur", "keyboard", KeyboardPane(store: store)))
         tabs.addTabViewItem(pane("Maus", "computermouse", MousePane()))
 
+        tabs.canPropagateSelectedChildViewControllerTitle = true
         let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable]
         window.toolbarStyle = .preference
@@ -43,6 +44,7 @@ final class SettingsWindowController {
         host.sizingOptions = [.preferredContentSize]
         let item = NSTabViewItem(viewController: host)
         item.label = title
+        host.title = title
         item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
         return item
     }

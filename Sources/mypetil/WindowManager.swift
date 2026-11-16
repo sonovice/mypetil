@@ -79,6 +79,7 @@ final class WindowManager {
             resize: { [weak self] width, final in self?.resizeSidebar(to: width, final: final) }
         )
         store.onChange = { [weak self] new in self?.apply(config: new) }
+        overlays.cornerRadius = config.windowCornerRadius
         rebuildWorkspaces()
 
         let nc = NSWorkspace.shared.notificationCenter
@@ -130,6 +131,7 @@ final class WindowManager {
         // Apps added to / removed from the floating list change their windows right away.
         let oldConfig = appliedConfig
         appliedConfig = new
+        overlays.cornerRadius = new.windowCornerRadius
         for w in windows.values {
             guard let bundle = w.bundleID else { continue }
             let was = oldConfig.floatingApps.contains(bundle), now = new.floatingApps.contains(bundle)
@@ -1010,7 +1012,8 @@ final class WindowManager {
             focusBorder.hide()
             return
         }
-        focusBorder.show(around: frame, width: config.focusBorderWidth, windowCornerRadius: config.windowCornerRadius)
+        focusBorder.show(around: frame, width: config.focusBorderWidth, windowCornerRadius: config.windowCornerRadius,
+                         above: id)
     }
 
     /// The window's actual frame; a window resting in its tile shares the border with its tab strip.

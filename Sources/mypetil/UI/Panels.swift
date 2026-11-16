@@ -7,8 +7,9 @@ final class ChromePanel: NSPanel {
     init(level: NSWindow.Level, clickThrough: Bool) {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
                    backing: .buffered, defer: true)
+        // Not `isFloatingPanel`: it would silently raise the level to .floating, putting focus
+        // border and tab strips above floating windows.
         self.level = level
-        isFloatingPanel = true
         becomesKeyOnlyIfNeeded = true
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
@@ -23,6 +24,16 @@ final class ChromePanel: NSPanel {
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    /// Shows the panel directly above another app's window, so windows in front of that one
+    /// (floating windows, dialogs) stay in front of the panel too. Without a window, on top.
+    func order(above window: CGWindowID?) {
+        if let window {
+            order(.above, relativeTo: Int(window))
+        } else {
+            orderFrontRegardless()
+        }
+    }
 
     /// Positions the panel using AX coordinates.
     func setAXFrame(_ rect: CGRect, animated: Bool = false) {
