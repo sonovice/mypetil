@@ -82,7 +82,23 @@ private struct GeneralPane: View {
                 ValueSlider(value: $store.config.sidebarWidth, range: Config.sidebarWidthRange, step: 10, unit: "pt")
                 Hint("Lässt sich auch an der rechten Kante der Seitenleiste ziehen.")
             }
+            SettingsRow("Hintergrund:") {
+                Toggle("Eigene Farbe statt Systemmaterial", isOn: customSidebarColor)
+                ColorPicker("Farbe", selection: sidebarColor, supportsOpacity: false)
+                    .labelsHidden()
+                    .disabled(store.config.sidebarColor == nil)
+            }
         }
+    }
+
+    private var customSidebarColor: Binding<Bool> {
+        Binding(get: { store.config.sidebarColor != nil },
+                set: { store.config.sidebarColor = $0 ? "#000000" : nil })
+    }
+
+    private var sidebarColor: Binding<Color> {
+        Binding(get: { Color(nsColor: store.config.sidebarColor.flatMap(NSColor.init(hex:)) ?? .black) },
+                set: { store.config.sidebarColor = NSColor($0).hexString })
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

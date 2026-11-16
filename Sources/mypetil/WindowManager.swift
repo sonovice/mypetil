@@ -402,7 +402,8 @@ final class WindowManager {
             }
         }
         targetFrames.removeAll()
-        sidebars.sync(workspaces, width: config.sidebarWidth, cornerRadius: config.windowCornerRadius)
+        sidebars.sync(workspaces, width: config.sidebarWidth, cornerRadius: config.windowCornerRadius,
+                      color: config.sidebarColor.flatMap(NSColor.init(hex:)))
         setNeedsLayout()
     }
 

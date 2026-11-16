@@ -18,7 +18,7 @@ Ein Tiling-Window-Manager für macOS mit Fensterleiste am linken Bildschirmrand,
 - **Mindestgrößen werden respektiert:** Wenn ein Fenster auch nach einem zweiten Versuch nicht kleiner werden will, merkt sich mypetil diese Größe und vergibt den Platz neu. Passt die Summe aller Mindestgrößen nicht auf den Bildschirm, wird der Platz proportional verteilt.
 - **Desktops (Spaces):** Jeder Desktop hat auf jedem Bildschirm sein eigenes Layout. Fenster anderer Desktops stehen in der Seitenleiste, auch direkt nach dem Start (sie werden wie bei yabai über ihre AX-Elemente gefunden).
 - **Beim Start bleibt alles, wo es ist:** mypetil liest die aktuelle Anordnung der Fenster und baut daraus das Layout nach, mit Teilungen, Verhältnissen und Tab-Gruppen (Fenster mit gleichem Rahmen). Gespeichert wird dafür nichts. Liegen Fenster wild übereinander, werden sie nach ihrer Lage getrennt.
-- **Seitenleiste** am linken Rand jedes Bildschirms im Stil einer Finder-Seitenleiste. Sie zeigt alle Fenster mit Icon, Titel und App und stellt Tab-Gruppen eingerückt dar. Die Breite lässt sich an der rechten Kante ziehen. Ein Klick fokussiert das Fenster, ein Rechtsklick öffnet ein Kontextmenü, und das Zahnrad unten öffnet die **Einstellungen**.
+- **Seitenleiste** am linken Rand jedes Bildschirms im Stil einer Finder-Seitenleiste. Sie zeigt alle Fenster mit Icon, Titel und App und stellt Tab-Gruppen eingerückt dar. Die Breite lässt sich an der rechten Kante ziehen, statt des Systemmaterials ist eine eigene Hintergrundfarbe möglich. Ein Klick fokussiert das Fenster, ein Rechtsklick öffnet ein Kontextmenü, und das Zahnrad unten öffnet die **Einstellungen**.
 
 ## Tastenkürzel
 
@@ -45,7 +45,7 @@ Zum Entwickeln geht auch `xcrun swift run`. Die Berechtigung gilt dann für das 
 
 ## Einstellungen
 
-Die Einstellungen öffnest du über das Zahnrad in der Seitenleiste oder über ⌘, im Menüleisten-Symbol. Dort lassen sich Abstände, Fokus-Rahmen, Breite der Seitenleiste, Höhe der Tab-Leiste, Größe der Tab-Zone, schwebende Apps und der Start bei der Anmeldung festlegen. Änderungen wirken sofort.
+Die Einstellungen öffnest du über das Zahnrad in der Seitenleiste oder über ⌘, im Menüleisten-Symbol. Dort lassen sich Abstände, Fokus-Rahmen, Breite und Farbe der Seitenleiste, Höhe der Tab-Leiste, Größe der Tab-Zone, schwebende Apps und der Start bei der Anmeldung festlegen. Änderungen wirken sofort.
 
 Gespeichert wird alles in `~/.config/mypetil/config.json`.
 

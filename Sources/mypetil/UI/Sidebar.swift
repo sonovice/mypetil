@@ -70,7 +70,7 @@ final class SidebarController {
         let handle: SidebarResizeHandle
     }
 
-    func sync(_ workspaces: [Workspace], width: CGFloat, cornerRadius: CGFloat) {
+    func sync(_ workspaces: [Workspace], width: CGFloat, cornerRadius: CGFloat, color: NSColor?) {
         let ids = Set(workspaces.map(\.displayID))
         for (id, sidebar) in sidebars where !ids.contains(id) {
             sidebar.panel.orderOut(nil)
@@ -82,6 +82,7 @@ final class SidebarController {
             frames[ws.displayID] = ws.sidebarFrame
             sidebar.handle.currentWidth = width
             sidebar.background.cornerRadius = cornerRadius
+            sidebar.background.fill = color
             sidebar.panel.setAXFrame(ws.sidebarFrame)
             sidebar.panel.orderFrontRegardless()
         }
@@ -124,11 +125,22 @@ final class SidebarController {
 }
 
 /// Sidebar material whose two corners away from the screen edge are rounded like app
-/// windows, with the same hairline outline.
+/// windows, with the same hairline outline. An optional solid fill replaces the material.
 final class SidebarBackground: NSVisualEffectView {
     var cornerRadius: CGFloat = 0 {
         didSet { layer?.cornerRadius = cornerRadius }
     }
+
+    /// Covers the material; the appearance follows it so text stays legible.
+    var fill: NSColor? {
+        didSet {
+            guard fill != oldValue else { return }
+            fillView.layer?.backgroundColor = fill?.cgColor
+            fillView.isHidden = fill == nil
+            appearance = fill.flatMap { NSAppearance(named: $0.isDark ? .darkAqua : .aqua) }
+        }
+    }
+    private let fillView = NSView()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -141,6 +153,11 @@ final class SidebarBackground: NSVisualEffectView {
         layer?.maskedCorners = [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
         layer?.borderWidth = 1
         updateBorderColor()
+        fillView.wantsLayer = true
+        fillView.isHidden = true
+        fillView.frame = bounds
+        fillView.autoresizingMask = [.width, .height]
+        addSubview(fillView)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -154,6 +171,28 @@ final class SidebarBackground: NSVisualEffectView {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.borderColor = NSColor.separatorColor.cgColor
         }
+    }
+}
+
+extension NSColor {
+    /// "#RRGGBB" (the "#" is optional).
+    convenience init?(hex: String) {
+        let digits = hex.hasPrefix("#") ? hex.dropFirst() : Substring(hex)
+        guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
+        self.init(srgbRed: CGFloat(value >> 16 & 0xFF) / 255, green: CGFloat(value >> 8 & 0xFF) / 255,
+                  blue: CGFloat(value & 0xFF) / 255, alpha: 1)
+    }
+
+    var hexString: String {
+        let c = usingColorSpace(.sRGB) ?? self
+        let byte = { (v: CGFloat) in Int((min(max(v, 0), 1) * 255).rounded()) }
+        return String(format: "#%02X%02X%02X", byte(c.redComponent), byte(c.greenComponent), byte(c.blueComponent))
+    }
+
+    /// Relative luminance below the midpoint: light text reads better on it.
+    var isDark: Bool {
+        let c = usingColorSpace(.sRGB) ?? self
+        return 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent < 0.5
     }
 }
 

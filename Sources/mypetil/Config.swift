@@ -11,6 +11,8 @@ struct Config: Codable, Equatable {
     /// Space between tiles and the sidebar / right screen edge (not top and bottom).
     var outerGap: CGFloat = 4
     var sidebarWidth: CGFloat = 220
+    /// Solid sidebar colour as "#RRGGBB"; nil keeps the translucent system material.
+    var sidebarColor: String?
     var tabBarHeight: CGFloat = 36
     /// Coloured frame around the focused window.
     var showFocusBorder = true
@@ -90,6 +92,7 @@ extension Config {
         gap = try c.decodeIfPresent(CGFloat.self, forKey: .gap) ?? d.gap
         outerGap = try c.decodeIfPresent(CGFloat.self, forKey: .outerGap) ?? d.outerGap
         sidebarWidth = try c.decodeIfPresent(CGFloat.self, forKey: .sidebarWidth) ?? d.sidebarWidth
+        sidebarColor = try c.decodeIfPresent(String.self, forKey: .sidebarColor)
         tabBarHeight = try c.decodeIfPresent(CGFloat.self, forKey: .tabBarHeight) ?? d.tabBarHeight
         showFocusBorder = try c.decodeIfPresent(Bool.self, forKey: .showFocusBorder) ?? d.showFocusBorder
         focusBorderWidth = try c.decodeIfPresent(CGFloat.self, forKey: .focusBorderWidth) ?? d.focusBorderWidth
