@@ -13,6 +13,8 @@ final class WindowManager {
     private(set) var windows: [CGWindowID: ManagedWindow] = [:]
     /// Every workspace seen so far: one per Space and display. Inactive ones keep their layout.
     private var allWorkspaces: [WorkspaceKey: Workspace] = [:]
+    /// Desktop numbers as Mission Control shows them, refreshed with the workspaces.
+    private var spaceNumbers: [Spaces.ID: Int] = [:]
     /// The workspaces currently on screen, one per display.
     private(set) var workspaces: [Workspace] = []
     private(set) var focusedID: CGWindowID?
@@ -114,6 +116,7 @@ final class WindowManager {
         inferLayouts()
         if let front = NSWorkspace.shared.frontmostApplication { updateFocus(front.processIdentifier) }
         layoutNow()
+        discoverWindowsOnOtherDesktops()
     }
 
     /// Brings parked tabs back on screen so nothing is lost when mypetil quits. They land on
@@ -156,10 +159,48 @@ final class WindowManager {
         }
         for (ws, found) in byWorkspace.values {
             let frontToBack = found.sorted { (zOrder[$0.id] ?? .max, $0.id) < (zOrder[$1.id] ?? .max, $1.id) }
+            guard ws.tree.isEmpty else {
+                // A layout exists already: the newcomers join it.
+                frontToBack.forEach(tile)
+                continue
+            }
             let frames = frontToBack.map { w in (id: w.id, frame: w.element.frame ?? ws.tilingBounds) }
             ws.tree.rebuild(from: frames, in: ws.tilingBounds, options: config.layoutOptions)
         }
         setNeedsLayout()
+    }
+
+    /// Windows on other desktops are invisible to `kAXWindowsAttribute`, so at start they would
+    /// be missing from the sidebar until their desktop is visited. They are found in the
+    /// background and arranged from where they are, like the windows on screen.
+    private func discoverWindowsOnOtherDesktops() {
+        let visibleSpaces = Set(workspaces.map(\.key.spaceID))
+        let list = CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements], kCGNullWindowID)
+            as? [[String: Any]] ?? []
+        var wanted: [pid_t: Set<CGWindowID>] = [:]
+        for info in list {
+            guard (info[kCGWindowLayer as String] as? Int) == 0,
+                  let id = info[kCGWindowNumber as String] as? CGWindowID, windows[id] == nil,
+                  let pid = info[kCGWindowOwnerPID as String] as? pid_t, observers[pid] != nil,
+                  let space = Spaces.space(of: id), !visibleSpaces.contains(space) else { continue }
+            wanted[pid, default: []].insert(id)
+        }
+        guard !wanted.isEmpty else { return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let found = wanted.map { pid, ids in (pid, RemoteWindows.find(ids, of: pid)) }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.adoptWindowsOnOtherDesktops(found) }
+            }
+        }
+    }
+
+    private func adoptWindowsOnOtherDesktops(_ found: [(pid_t, [CGWindowID: AXUIElement])]) {
+        isStarting = true
+        for (pid, elements) in found where observers[pid] != nil {
+            for (id, element) in elements where windows[id] == nil { adopt(element, id: id, pid: pid) }
+        }
+        isStarting = false
+        inferLayouts()
     }
 
     /// Position of every on-screen window in the window stack, front-most first.
@@ -266,10 +307,12 @@ final class WindowManager {
         return workspaces.first
     }
 
-    /// The workspace a window belongs to by its Space and position.
+    /// The workspace a window belongs to by its Space (and the display that Space is on).
     private func homeWorkspace(of w: ManagedWindow) -> Workspace? {
         let visible = workspace(showing: w)
-        guard let space = Spaces.space(of: w.id), let display = visible?.displayID ?? workspaces.first?.displayID
+        guard let space = Spaces.space(of: w.id),
+              let display = Spaces.displayID(of: space, in: Spaces.displays())
+                ?? visible?.displayID ?? workspaces.first?.displayID
         else { return visible }
         if let active = workspaces.first(where: { $0.key.spaceID == space && $0.displayID == display }) { return active }
         return workspace(for: WorkspaceKey(displayID: display, spaceID: space))
@@ -278,6 +321,7 @@ final class WindowManager {
     private func workspace(for key: WorkspaceKey) -> Workspace {
         if let ws = allWorkspaces[key] { return ws }
         let ws = Workspace(key: key)
+        ws.spaceNumber = spaceNumbers[key.spaceID] ?? 0
         if let screen = NSScreen.screens.first(where: { $0.displayID == key.displayID }) {
             ws.update(screen: screen, config: config)
         }
@@ -332,6 +376,7 @@ final class WindowManager {
         let spaceDisplays = Spaces.displays()
         var numbers: [Spaces.ID: Int] = [:]
         for d in spaceDisplays { for s in d.spaces { numbers[s.id] = s.number } }
+        spaceNumbers = numbers
 
         let screens = NSScreen.screens
         workspaces = screens.map { screen in

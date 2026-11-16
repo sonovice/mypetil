@@ -54,6 +54,17 @@ enum Spaces {
         return displays.first { $0.identifier == uuid } ?? displays.first { $0.identifier == "Main" } ?? displays.first
     }
 
+    /// The display (as an `NSScreen` display ID) whose desktops include `space`; nil when all
+    /// displays share their desktops.
+    static func displayID(of space: ID, in displays: [Display]) -> CGDirectDisplayID? {
+        guard let display = displays.first(where: { $0.spaces.contains { $0.id == space } }),
+              display.identifier != "Main" else { return nil }
+        return NSScreen.screens.first { screen in
+            CGDisplayCreateUUIDFromDisplayID(screen.displayID)
+                .map { CFUUIDCreateString(nil, $0.takeRetainedValue()) as String } == display.identifier
+        }?.displayID
+    }
+
     /// The Space a window lives on (nil for windows on all Spaces or unknown windows).
     static func space(of window: CGWindowID) -> ID? {
         let list = [NSNumber(value: window)] as CFArray
