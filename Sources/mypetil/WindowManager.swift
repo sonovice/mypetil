@@ -41,6 +41,10 @@ final class WindowManager {
     private var isMouseDown = false
     private var lastMouseUp: TimeInterval = 0
 
+    /// Windows floated by hand in a previous run, applied when they are adopted again.
+    private var savedFloating: Set<CGWindowID> = []
+    private var saveWork: DispatchWorkItem?
+
     private var layoutScheduled = false
     private var uiScheduled = false
     private var verifyScheduled = false
@@ -75,6 +79,7 @@ final class WindowManager {
             resize: { [weak self] width, final in self?.resizeSidebar(to: width, final: final) }
         )
         store.onChange = { [weak self] new in self?.apply(config: new) }
+        restoreSavedLayout()
         rebuildWorkspaces()
 
         let nc = NSWorkspace.shared.notificationCenter
@@ -104,10 +109,18 @@ final class WindowManager {
         for app in NSWorkspace.shared.runningApplications { observe(app) }
         if let front = NSWorkspace.shared.frontmostApplication { updateFocus(front.processIdentifier) }
         layoutNow()
+        // Restored tiles whose window did not turn up (closed meanwhile, no longer a
+        // standard window) would leave holes. Apps that are slow to answer get some time.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.dropUnclaimedTiles() }
     }
 
-    /// Brings parked tabs back on screen so nothing is lost when mypetil quits.
-    func restoreParkedWindows() {
+    /// Saves the layout and brings parked tabs back on screen, so nothing is lost when mypetil quits.
+    func prepareForQuit() {
+        saveLayout()
+        restoreParkedWindows()
+    }
+
+    private func restoreParkedWindows() {
         for ws in allWorkspaces.values {
             for g in ws.layout.groups {
                 for id in g.windows where parkedTabs.contains(id) {
@@ -130,6 +143,46 @@ final class WindowManager {
         rebuildWorkspaces()
     }
 
+
+    // MARK: - Saved layout
+
+    private func restoreSavedLayout() {
+        guard let saved = SavedLayout.load() else { return }
+        for entry in saved.workspaces {
+            let ws = workspace(for: WorkspaceKey(displayID: entry.displayID, spaceID: entry.spaceID))
+            ws.tree.restore(entry.tree, keeping: Spaces.windowExists)
+            ws.zoomed = entry.zoomed.flatMap { ws.tree.contains($0) ? $0 : nil }
+        }
+        savedFloating = Set(saved.floating.filter(Spaces.windowExists))
+    }
+
+    private func dropUnclaimedTiles() {
+        for ws in workspaces {
+            for id in ws.tree.windows where windows[id] == nil { ws.tree.remove(id) }
+        }
+        savedFloating.removeAll()
+        setNeedsLayout()
+    }
+
+    private func scheduleSave() {
+        saveWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.saveLayout() }
+        saveWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+    }
+
+    private func saveLayout() {
+        saveWork?.cancel()
+        saveWork = nil
+        var saved = SavedLayout()
+        saved.workspaces = allWorkspaces.values.compactMap { ws in
+            ws.tree.snapshot.map {
+                SavedLayout.SavedWorkspace(displayID: ws.key.displayID, spaceID: ws.key.spaceID, tree: $0, zoomed: ws.zoomed)
+            }
+        }
+        saved.floating = windows.values.filter(\.isFloating).map(\.id) + savedFloating
+        saved.save()
+    }
 
     // MARK: - Discovery
 
@@ -174,7 +227,14 @@ final class WindowManager {
         windows[id] = w
         observers[pid]?.watch(element, id: id)
         if element.bool(AXAttr.fullScreen) == true { fullScreen.insert(id) }
-        if isTileable(w) { tile(w) }
+        if savedFloating.remove(id) != nil { w.isFloating = true }
+        if !isTileable(w) {
+            untileQuietly(id)
+        } else if workspace(containing: id) == nil {
+            tile(w)
+        } else {
+            setNeedsLayout()   // restored from the saved layout
+        }
         // The focus notification of a new window often arrives before we know the window.
         if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { updateFocus(pid) }
         setNeedsUI()
@@ -349,6 +409,7 @@ final class WindowManager {
         layoutScheduled = false
         for ws in workspaces { apply(ws) }
         setNeedsUI()
+        scheduleSave()
     }
 
     private func apply(_ ws: Workspace) {
@@ -856,9 +917,9 @@ final class WindowManager {
 
     // MARK: Gesture overlays
 
-    /// A preview tile (icon and title) for every other tiled window on screen, at the frame it
-    /// would have after the drop, so the whole layout reads at a glance. The dragged window's
-    /// own tile is the ghost (see `updateMove`).
+    /// A preview tile (icon and title) for every tiled window on screen, at the frame it would
+    /// have after the drop, so the whole layout reads at a glance. Before a target is found
+    /// the dragged window keeps its own tile; its travelling copy is the ghost (see `updateMove`).
     private func moveOverlays(_ id: CGWindowID, plan: DropPlan?) -> [OverlayItem] {
         let sourceWS = workspace(containing: id)
         var items: [OverlayItem] = []
@@ -873,10 +934,14 @@ final class WindowManager {
             } else {
                 layout = ws.layout
             }
-            for g in layout.groups where !g.windows.contains(id) {
-                guard let other = windows[g.activeWindow] else { continue }
-                items.append(OverlayItem(frame: g.frame, style: .window, title: other.displayTitle, icon: other.icon))
+            for g in layout.groups where plan == nil || g.activeWindow != id {
+                guard let w = windows[g.activeWindow] else { continue }
+                items.append(OverlayItem(frame: g.frame, style: .window, title: w.displayTitle, icon: w.icon))
             }
+        }
+        // A floating window has no tile; it is previewed where it is.
+        if plan == nil, sourceWS == nil, case .move(let session) = gesture, let w = windows[id] {
+            items.append(OverlayItem(frame: session.startFrame, style: .window, title: w.displayTitle, icon: w.icon))
         }
         return items
     }

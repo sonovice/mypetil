@@ -8,7 +8,7 @@ public typealias WindowID = UInt32
 /// "top" therefore means smaller y.
 
 /// How a split arranges its two children.
-public enum Axis: Sendable, Equatable {
+public enum Axis: Sendable, Equatable, Codable {
     /// Children side by side: first is left, second is right.
     case horizontal
     /// Children stacked: first is top, second is bottom.

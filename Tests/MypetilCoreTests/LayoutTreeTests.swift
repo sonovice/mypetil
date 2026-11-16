@@ -1,3 +1,4 @@
+import Foundation
 import CoreGraphics
 import Testing
 @testable import MypetilCore
@@ -339,5 +340,34 @@ private func frame(_ w: WindowID, _ r: LayoutResult) -> CGRect? { r.group(contai
     func wholeTopThirdGrabsTopEdge(ny: Double) {
         let p = CGPoint(x: f.midX, y: f.minY + f.height * ny)
         #expect(ResizeEdges.at(p, in: f) == [.top])
+    }
+}
+
+@Suite struct SnapshotTests {
+    @Test func roundTripKeepsTheLayout() throws {
+        let t = LayoutTree()
+        t.insert(1, near: nil, bounds: bounds, options: noGap)
+        t.insert(2, near: 1, bounds: bounds, options: noGap)
+        t.insert(3, near: 2, bounds: bounds, options: noGap)
+        t.drop(4, onto: 3, zone: .center)
+        t.applyManualResize(of: 1, from: CGRect(x: 0, y: 0, width: 500, height: 600),
+                            to: CGRect(x: 0, y: 0, width: 300, height: 600), bounds: bounds, options: noGap)
+        let data = try JSONEncoder().encode(try #require(t.snapshot))
+        let restored = LayoutTree()
+        restored.restore(try JSONDecoder().decode(LayoutSnapshot.self, from: data))
+        #expect(restored.layout(in: bounds, options: noGap) == t.layout(in: bounds, options: noGap))
+    }
+
+    @Test func missingWindowsLeaveNoHoles() throws {
+        let t = LayoutTree()
+        t.insert(1, near: nil, bounds: bounds, options: noGap)
+        t.insert(2, near: 1, bounds: bounds, options: noGap)
+        t.insert(3, near: 2, bounds: bounds, options: noGap)
+        let restored = LayoutTree()
+        restored.restore(try #require(t.snapshot), keeping: { $0 != 2 })
+        #expect(restored.windows == [1, 3])
+        let r = restored.layout(in: bounds, options: noGap)
+        #expect(frame(1, r)?.width == 500)
+        #expect(frame(3, r)?.width == 500)
     }
 }
