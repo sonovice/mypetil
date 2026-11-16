@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import MypetilCore
 
 /// Global input via one CGEvent tap:
 ///
@@ -24,9 +25,10 @@ final class InputController {
         /// A mypetil move. For a hijacked title-bar drag, `releaseAt` is where the app gets
         /// its mouse-up, so the system's drag ends where it was stopped.
         case moving(releaseAt: CGPoint?)
-        /// A floating window dragged natively by its title bar; only the border is ours.
-        case followingDrag(CGWindowID, at: CGPoint, frame: CGRect)
-        case resizing
+        /// A floating window moved or resized natively; only the border is ours.
+        case followingDrag(CGWindowID, at: CGPoint, frame: CGRect, edges: ResizeEdges)
+        /// A mypetil resize (⌥ + right drag, or a hijacked edge drag; see `moving`).
+        case resizing(releaseAt: CGPoint?)
         /// A gesture cancelled with Esc: the rest of the drag is swallowed.
         case cancelled(releaseAt: CGPoint?)
     }
@@ -93,16 +95,17 @@ final class InputController {
             return nil
 
         case (.leftMouseDragged, .windowPressed(let id, let start, let frame, let last)):
-            return titleBarDrag(id, start: start, frame: frame, last: last, point: point, event: event)
+            return systemDrag(id, start: start, frame: frame, last: last, point: point, event: event)
 
         case (.leftMouseDragged, .moving):
             wm.updateMove(at: point)
             return nil
 
-        case (.leftMouseDragged, .followingDrag(let id, let start, let frame)):
-            wm.followTitleBarDrag(id, windowFrame: frame.offsetBy(dx: point.x - start.x, dy: point.y - start.y))
+        case (.leftMouseDragged, .followingDrag(let id, let start, let frame, let edges)):
+            let delta = CGVector(dx: point.x - start.x, dy: point.y - start.y)
+            wm.followSystemDrag(id, windowFrame: edges.apply(to: frame, delta: delta))
 
-        case (.leftMouseDragged, .cancelled):
+        case (.leftMouseDragged, .cancelled), (.rightMouseDragged, .cancelled):
             return nil
 
         case (.leftMouseUp, .tabPressed(let tab, _)):
@@ -115,31 +118,31 @@ final class InputController {
             wm.endMove()
             return release(event, at: releaseAt)
 
-        case (.leftMouseUp, .cancelled(let releaseAt)):
+        case (.leftMouseUp, .cancelled(let releaseAt)), (.rightMouseUp, .cancelled(let releaseAt)):
             state = .idle
             return release(event, at: releaseAt)
 
         case (.leftMouseUp, .followingDrag):
             state = .idle
-            wm.endTitleBarDrag()
+            wm.endSystemDrag()
 
         case (.leftMouseUp, .windowPressed):
             state = .idle
 
         case (.rightMouseDown, .idle):
             if flags == .maskAlternate, let id = Self.windowUnder(point), wm.isManaged(id), wm.beginResize(id, at: point) {
-                state = .resizing
+                state = .resizing(releaseAt: nil)
                 return nil
             }
 
-        case (.rightMouseDragged, .resizing):
+        case (.rightMouseDragged, .resizing), (.leftMouseDragged, .resizing):
             wm.updateResize(at: point)
             return nil
 
-        case (.rightMouseUp, .resizing):
+        case (.rightMouseUp, .resizing(let releaseAt)), (.leftMouseUp, .resizing(let releaseAt)):
             state = .idle
             wm.endResize()
-            return nil
+            return release(event, at: releaseAt)
 
         case (.keyDown, _):
             let key = Int(event.getIntegerValueField(.keyboardEventKeycode))
@@ -148,8 +151,9 @@ final class InputController {
                 state = .cancelled(releaseAt: releaseAt)
                 return nil
             }
-            if key == kVK_Escape, case .resizing = state {
-                reset()
+            if key == kVK_Escape, case .resizing(let releaseAt) = state {
+                wm.cancelGesture()
+                state = .cancelled(releaseAt: releaseAt)
                 return nil
             }
             if flags == [.maskControl, .maskAlternate], let command = shortcut(for: key) {
@@ -174,10 +178,12 @@ final class InputController {
         }
     }
 
-    /// Decides whether a plain drag on a window moves it by its title bar: the window follows
-    /// the mouse (whatever the app's title bar looks like). Tiled windows are then taken over
-    /// by mypetil; floating ones keep moving natively, with the border following the mouse.
-    private func titleBarDrag(_ id: CGWindowID, start: CGPoint, frame: CGRect, last: CGPoint,
+    /// Decides whether a plain drag on a window is the system moving it (title bar) or
+    /// resizing it (edge), by watching which of its edges follow the mouse; that works
+    /// whatever the app's title bar looks like. Tiled windows are then taken over by mypetil
+    /// (same previews as ⌥-drag / ⌥-resize); floating ones keep their native behaviour, with
+    /// the border following the mouse.
+    private func systemDrag(_ id: CGWindowID, start: CGPoint, frame: CGRect, last: CGPoint,
                               point: CGPoint, event: CGEvent) -> Unmanaged<CGEvent>? {
         let pass = Unmanaged.passUnretained(event)
         let distance = hypot(point.x - start.x, point.y - start.y)
@@ -189,21 +195,34 @@ final class InputController {
             state = .idle
             return pass
         }
-        let moved = hypot(now.minX - frame.minX, now.minY - frame.minY) > 1
+        var changed: ResizeEdges = []
+        if abs(now.minX - frame.minX) > 1 { changed.insert(.left) }
+        if abs(now.maxX - frame.maxX) > 1 { changed.insert(.right) }
+        if abs(now.minY - frame.minY) > 1 { changed.insert(.top) }
+        if abs(now.maxY - frame.maxY) > 1 { changed.insert(.bottom) }
         let sameSize = abs(now.width - frame.width) < 2 && abs(now.height - frame.height) < 2
-        guard moved, sameSize else {
+        guard !changed.isEmpty else {
             // Selecting text, dragging a file …: not ours. Give up once clearly something else.
             state = distance > 40 ? .idle : .windowPressed(id, at: start, frame: frame, last: point)
             return pass
         }
+        // A move shifts every edge alike; a resize moves only the grabbed ones.
+        let edges: ResizeEdges = sameSize ? [.left, .right, .top, .bottom] : changed
         if wm.isTiled(id) {
-            state = .moving(releaseAt: last)
-            wm.beginTitleBarMove(id, grabbedAt: start, windowFrame: frame)
-            wm.updateMove(at: point)
+            if sameSize {
+                state = .moving(releaseAt: last)
+                wm.beginTitleBarMove(id, grabbedAt: start, windowFrame: frame)
+                wm.updateMove(at: point)
+            } else {
+                state = .resizing(releaseAt: last)
+                wm.beginEdgeResize(id, grabbedAt: start, edges: edges, windowFrame: frame)
+                wm.updateResize(at: point)
+            }
             return nil
         }
-        state = .followingDrag(id, at: start, frame: frame)
-        wm.followTitleBarDrag(id, windowFrame: frame.offsetBy(dx: point.x - start.x, dy: point.y - start.y))
+        state = .followingDrag(id, at: start, frame: frame, edges: edges)
+        wm.followSystemDrag(id, windowFrame: edges.apply(to: frame, delta: CGVector(dx: point.x - start.x,
+                                                                                      dy: point.y - start.y)))
         return pass
     }
 
@@ -217,7 +236,7 @@ final class InputController {
     private func reset() {
         switch state {
         case .moving, .resizing: wm.cancelGesture()
-        case .followingDrag: wm.endTitleBarDrag()
+        case .followingDrag: wm.endSystemDrag()
         case .idle, .tabPressed, .windowPressed, .cancelled: break
         }
         state = .idle
