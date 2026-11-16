@@ -10,7 +10,7 @@ import Carbon.HIToolbox
 /// - Click on a tab strip: activate that tab (or close it via its ×). Drag a tab: move
 ///   that window, no ⌥ needed.
 /// - ⌃⌥G: float / tile the focused window. ⌃⌥M: maximize it within the tiling area (not
-///   native full screen). Esc cancels a gesture.
+///   native full screen). ⌃⌥ + other keys: the user's launchers. Esc cancels a gesture.
 ///
 /// Events belonging to these gestures are swallowed so the app below never sees them.
 @MainActor
@@ -119,8 +119,8 @@ final class InputController {
                 reset()
                 return nil
             }
-            if flags == [.maskControl, .maskAlternate], let command = Self.shortcuts[key] {
-                if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { command(wm)() }
+            if flags == [.maskControl, .maskAlternate], let command = shortcut(for: key) {
+                if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { command() }
                 return nil
             }
 
@@ -130,11 +130,16 @@ final class InputController {
         return pass
     }
 
-    /// The keyboard shortcuts, all with ⌃⌥.
-    private static let shortcuts: [Int: (WindowManager) -> () -> Void] = [
-        kVK_ANSI_G: { wm in { wm.toggleFloating() } },
-        kVK_ANSI_M: { wm in { wm.toggleZoom() } },
-    ]
+    /// What ⌃⌥ + `key` does: mypetil's own commands first, then the user's launchers.
+    private func shortcut(for key: Int) -> (() -> Void)? {
+        switch key {
+        case kVK_ANSI_G: return { [wm] in wm.toggleFloating() }
+        case kVK_ANSI_M: return { [wm] in wm.toggleZoom() }
+        default:
+            guard let launcher = wm.config.launchers.first(where: { $0.keyCode == key }) else { return nil }
+            return { launcher.open() }
+        }
+    }
 
     private func reset() {
         switch state {

@@ -26,7 +26,8 @@ final class SettingsWindowController {
         tabs.addTabViewItem(pane("Allgemein", "gearshape", GeneralPane(store: store)))
         tabs.addTabViewItem(pane("Layout", "rectangle.split.3x1", LayoutPane(store: store)))
         tabs.addTabViewItem(pane("Schwebend", "macwindow.on.rectangle", FloatingPane(store: store)))
-        tabs.addTabViewItem(pane("Bedienung", "computermouse", ControlsPane()))
+        tabs.addTabViewItem(pane("Tastatur", "keyboard", KeyboardPane(store: store)))
+        tabs.addTabViewItem(pane("Maus", "computermouse", MousePane()))
 
         let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable]
@@ -129,7 +130,10 @@ private struct FloatingPane: View {
                 }
                 .listStyle(.bordered(alternatesRowBackgrounds: true))
                 .frame(height: 200)
-                HStack(spacing: 0) {
+                ListFooter(removeHelp: "Ausgewählte App entfernen", canRemove: selection != nil, remove: {
+                    if let selection { store.config.floatingApps.removeAll { $0 == selection } }
+                    selection = nil
+                }) {
                     Menu {
                         ForEach(addableApps, id: \.bundleIdentifier) { app in
                             Button(app.localizedName ?? app.bundleIdentifier ?? "?") {
@@ -143,24 +147,9 @@ private struct FloatingPane: View {
                     .menuStyle(.borderlessButton)
                     .frame(width: 24, height: 20)
                     .help("App hinzufügen")
-                    Divider().frame(height: 16)
-                    Button {
-                        if let selection { store.config.floatingApps.removeAll { $0 == selection } }
-                        selection = nil
-                    } label: {
-                        Image(systemName: "minus").frame(width: 24, height: 20)
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(selection == nil)
-                    .help("Ausgewählte App entfernen")
-                    Spacer()
                 }
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .overlay(alignment: .top) { Divider() }
             }
-            .overlay(RoundedRectangle(cornerRadius: 0).stroke(Color(nsColor: .separatorColor)))
+            .overlay(Rectangle().stroke(Color(nsColor: .separatorColor)))
             Hint("Einzelne Fenster schweben lassen: ⌃⌥G oder Rechtsklick in der Seitenleiste.")
         }
     }
@@ -175,7 +164,113 @@ private struct FloatingPane: View {
     }
 }
 
-private struct ControlsPane: View {
+private struct KeyboardPane: View {
+    @Bindable var store: ConfigStore
+    @State private var selection: Int?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SettingsGrid {
+                SettingsRow("⌃⌥G:") { Text("Fenster schweben lassen / kacheln") }
+                SettingsRow("⌃⌥M:") { Text("Fenster maximieren / zurück") }
+            }
+            Divider().padding(.vertical, 6)
+            Text("⌃⌥ + Taste öffnet eine App, einen Ordner oder eine Datei:")
+            VStack(spacing: 0) {
+                List(selection: $selection) {
+                    ForEach(store.config.launchers.indices, id: \.self) { i in
+                        LauncherRow(launcher: $store.config.launchers[i], isDuplicate: isDuplicate(i))
+                            .tag(i)
+                    }
+                }
+                .listStyle(.bordered(alternatesRowBackgrounds: true))
+                .frame(height: 220)
+                ListFooter(addHelp: "App oder Ordner hinzufügen", removeHelp: "Ausgewähltes Kürzel entfernen",
+                           canRemove: selection != nil, add: add, remove: remove)
+            }
+            .overlay(Rectangle().stroke(Color(nsColor: .separatorColor)))
+            Hint("Bei „Neues Fenster“ wird die App erneut gestartet, z. B. für ein weiteres Terminal.")
+        }
+    }
+
+    private func isDuplicate(_ i: Int) -> Bool {
+        let key = store.config.launchers[i].key
+        guard !key.isEmpty else { return false }
+        return Launcher.reservedKeys.contains(key)
+            || store.config.launchers.indices.contains { $0 != i && store.config.launchers[$0].key == key }
+    }
+
+    private func add() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.treatsFilePackagesAsDirectories = false
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.prompt = "Hinzufügen"
+        NSApp.activate()
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let path = (url.path as NSString).abbreviatingWithTildeInPath
+        store.config.launchers.append(Launcher(key: suggestedKey(for: url), path: path))
+        selection = store.config.launchers.count - 1
+    }
+
+    /// The first letter of the name that is still free.
+    private func suggestedKey(for url: URL) -> String {
+        let taken = Set(store.config.launchers.map(\.key)).union(Launcher.reservedKeys)
+        let name = FileManager.default.displayName(atPath: url.path).lowercased()
+        return name.map(String.init).first { Launcher.keyCodes[$0] != nil && !taken.contains($0) } ?? ""
+    }
+
+    private func remove() {
+        if let selection, store.config.launchers.indices.contains(selection) {
+            store.config.launchers.remove(at: selection)
+        }
+        selection = nil
+    }
+}
+
+private struct LauncherRow: View {
+    @Binding var launcher: Launcher
+    let isDuplicate: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 2) {
+                Text("⌃⌥").foregroundStyle(.secondary)
+                TextField("", text: keyBinding)
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 28)
+            }
+            .help(isDuplicate ? "Diese Taste ist schon belegt." : "Taste (Buchstabe oder Ziffer)")
+            if isDuplicate {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+            }
+            Image(nsImage: launcher.icon).resizable().frame(width: 18, height: 18)
+            Text(launcher.displayName).lineLimit(1)
+            Spacer()
+            if launcher.isApp {
+                Toggle("Neues Fenster", isOn: $launcher.newInstance)
+                    .toggleStyle(.checkbox)
+                    .controlSize(.small)
+            }
+        }
+        .help(launcher.path)
+    }
+
+    /// Keeps exactly one letter or digit, lowercased.
+    private var keyBinding: Binding<String> {
+        Binding(
+            get: { launcher.key.uppercased() },
+            set: { text in
+                let last = text.lowercased().map(String.init).last { Launcher.keyCodes[$0] != nil }
+                launcher.key = last ?? ""
+            }
+        )
+    }
+}
+
+private struct MousePane: View {
     var body: some View {
         SettingsGrid {
             SettingsRow("⌥ + Linksklick ziehen:") { Text("Fenster verschieben") }
@@ -187,14 +282,59 @@ private struct ControlsPane: View {
             SettingsRow("Fensterrand ziehen:") { Text("Nachbarfenster passen sich an") }
             SettingsRow("Doppelklick Titelleiste:") { Text("Maximieren") }
             SettingsRow("Tab anklicken / ziehen:") { Text("Wechseln / herauslösen") }
-            SettingsDivider()
-            SettingsRow("⌃⌥G:") { Text("Fenster schweben lassen / kacheln") }
-            SettingsRow("⌃⌥M:") { Text("Fenster maximieren / zurück") }
         }
     }
 }
 
 // MARK: - Building blocks
+
+/// The +/− bar under an editable list.
+private struct ListFooter<AddButton: View>: View {
+    let removeHelp: String
+    let canRemove: Bool
+    let remove: () -> Void
+    @ViewBuilder let addButton: AddButton
+
+    init(removeHelp: String, canRemove: Bool, remove: @escaping () -> Void,
+         @ViewBuilder addButton: () -> AddButton) {
+        self.removeHelp = removeHelp
+        self.canRemove = canRemove
+        self.remove = remove
+        self.addButton = addButton()
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            addButton
+            Divider().frame(height: 16)
+            Button(action: remove) {
+                Image(systemName: "minus").frame(width: 24, height: 20)
+            }
+            .buttonStyle(.borderless)
+            .disabled(!canRemove)
+            .help(removeHelp)
+            Spacer()
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .overlay(alignment: .top) { Divider() }
+    }
+}
+
+extension ListFooter where AddButton == AnyView {
+    /// A plain + button.
+    init(addHelp: String, removeHelp: String, canRemove: Bool, add: @escaping () -> Void,
+         remove: @escaping () -> Void) {
+        self.init(removeHelp: removeHelp, canRemove: canRemove, remove: remove) {
+            AnyView(Button(action: add) {
+                Image(systemName: "plus").frame(width: 24, height: 20)
+            }
+            .buttonStyle(.borderless)
+            .help(addHelp))
+        }
+    }
+}
 
 /// Two columns: right-aligned labels, left-aligned controls.
 private struct SettingsGrid<Content: View>: View {

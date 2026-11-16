@@ -28,6 +28,9 @@ struct Config: Codable, Equatable {
         "com.apple.archiveutility",
     ]
 
+    /// ⌃⌥ + key opens an app, folder or file.
+    var launchers: [Launcher] = []
+
     static let currentVersion = 2
     static let defaultWindowCornerRadius: CGFloat =
         ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 26, minorVersion: 0, patchVersion: 0))
@@ -89,6 +92,7 @@ extension Config {
         windowCornerRadius = try c.decodeIfPresent(CGFloat.self, forKey: .windowCornerRadius) ?? d.windowCornerRadius
         centerZoneFraction = try c.decodeIfPresent(CGFloat.self, forKey: .centerZoneFraction) ?? d.centerZoneFraction
         floatingApps = try c.decodeIfPresent([String].self, forKey: .floatingApps) ?? d.floatingApps
+        launchers = try c.decodeIfPresent([Launcher].self, forKey: .launchers) ?? d.launchers
     }
 }
 
