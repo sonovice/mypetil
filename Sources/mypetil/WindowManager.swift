@@ -804,7 +804,8 @@ final class WindowManager {
             ?? windows[session.id].map { previewItem($0, frame: border) }
         if let ghost {
             overlays.showGhost(OverlayItem(frame: border, style: style, tabs: ghost.tabs, activeIndex: ghost.activeIndex,
-                                           tabBarHeight: ghost.tabBarHeight), animated: planChanged)
+                                           tabBarHeight: ghost.tabBarHeight),
+                               animated: planChanged, translucent: true)
         }
     }
 
@@ -1039,7 +1040,8 @@ final class WindowManager {
                 // A maximized window covers the tiles; their tab strips would float above it.
                 guard let bar = g.tabBarFrame, ws.zoomed == nil else { continue }
                 let tabs = g.windows.compactMap { id in windows[id].map { TabStrip.Tab(window: $0, isActive: id == g.activeWindow) } }
-                strips.append(TabStrip(frame: bar, tabs: tabs, hasFocus: hasFocus))
+                strips.append(TabStrip(frame: bar, windowFrame: g.windowFrame, tabs: tabs, hasFocus: hasFocus,
+                                       cornerRadius: config.windowCornerRadius))
             }
         }
         tabBars.show(strips)

@@ -72,8 +72,10 @@ final class OverlayController {
         return (panel, host)
     }()
 
-    func showGhost(_ item: OverlayItem, animated: Bool) {
+    /// - Parameter translucent: For a window being dragged, so what lies below stays visible.
+    func showGhost(_ item: OverlayItem, animated: Bool, translucent: Bool = false) {
         let (panel, host) = ghost
+        panel.alphaValue = translucent ? 0.7 : 1
         if host.rootView.item?.style != item.style || host.rootView.item?.tabs != item.tabs
             || host.rootView.item?.activeIndex != item.activeIndex {
             host.rootView = OverlayItemView(item: item, cornerRadius: cornerRadius)

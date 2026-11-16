@@ -35,6 +35,11 @@ final class ChromePanel: NSPanel {
         }
     }
 
+    /// Shows the panel directly below another app's window.
+    func order(below window: CGWindowID) {
+        order(.below, relativeTo: Int(window))
+    }
+
     /// Positions the panel using AX coordinates.
     func setAXFrame(_ rect: CGRect, animated: Bool = false) {
         let target = Screens.toCocoa(rect)

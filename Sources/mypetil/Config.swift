@@ -8,7 +8,7 @@ struct Config: Codable, Equatable {
     var configVersion = Config.currentVersion
     /// Space between tiles.
     var gap: CGFloat = 6
-    /// Space between tiles and the screen edges / sidebar.
+    /// Space between tiles and the sidebar / right screen edge (not top and bottom).
     var outerGap: CGFloat = 4
     var sidebarWidth: CGFloat = 220
     var tabBarHeight: CGFloat = 36

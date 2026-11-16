@@ -10,8 +10,19 @@ struct TabStrip {
 
     /// AX coordinates.
     let frame: CGRect
+    /// Where the group's active window sits, below the strip.
+    let windowFrame: CGRect
     let tabs: [Tab]
     let hasFocus: Bool
+    /// The windows' corner radius; the strip's top corners use it too.
+    let cornerRadius: CGFloat
+
+    /// The strip's background continues behind the top of the window, so the window's
+    /// rounded corners show the strip instead of a gap: strip and window read as one shape.
+    var panelFrame: CGRect {
+        CGRect(x: frame.minX, y: frame.minY, width: frame.width,
+               height: max(frame.height, windowFrame.minY + cornerRadius - frame.minY))
+    }
 
     /// Diameter of a tab's close button. It sits at the trailing end, as far from the tab's
     /// edge as from the strip's top and bottom, in a square hit area as tall as the strip.
@@ -51,8 +62,13 @@ final class TabBarController {
         for (i, entry) in panels.enumerated() {
             if i < strips.count {
                 entry.host.rootView = TabStripView(strip: strips[i])
-                entry.panel.setAXFrame(strips[i].frame)
-                entry.panel.order(above: strips[i].tabs.first(where: \.isActive)?.window.id)
+                entry.panel.setAXFrame(strips[i].panelFrame)
+                // Below the window, which covers the extended background.
+                if let active = strips[i].tabs.first(where: \.isActive)?.window.id {
+                    entry.panel.order(below: active)
+                } else {
+                    entry.panel.orderFrontRegardless()
+                }
             } else {
                 entry.panel.orderOut(nil)
             }
@@ -69,16 +85,21 @@ struct TabStripView: View {
 
     var body: some View {
         if let strip {
+            let r = strip.cornerRadius
             GeometryReader { geo in
                 let width = geo.size.width / CGFloat(max(strip.tabs.count, 1))
                 HStack(spacing: 0) {
-                    ForEach(strip.tabs, id: \.window.id) { tab in
-                        TabView(tab: tab, groupHasFocus: strip.hasFocus, height: geo.size.height)
-                            .frame(width: width, height: geo.size.height)
+                    ForEach(strip.tabs.indices, id: \.self) { i in
+                        TabView(tab: strip.tabs[i], groupHasFocus: strip.hasFocus, height: strip.frame.height,
+                                // The outer tabs' highlights follow the strip's rounded corners.
+                                leadingRadius: i == 0 ? r : 0,
+                                trailingRadius: i == strip.tabs.count - 1 ? r : 0)
+                            .frame(width: width, height: strip.frame.height)
                     }
                 }
+                .frame(maxHeight: .infinity, alignment: .top)
             }
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(.regularMaterial, in: UnevenRoundedRectangle(topLeadingRadius: r, topTrailingRadius: r))
         }
     }
 }
@@ -87,6 +108,8 @@ private struct TabView: View {
     let tab: TabStrip.Tab
     let groupHasFocus: Bool
     let height: CGFloat
+    var leadingRadius: CGFloat = 0
+    var trailingRadius: CGFloat = 0
 
     var body: some View {
         HStack(spacing: 6) {
@@ -111,7 +134,9 @@ private struct TabView: View {
         .foregroundStyle(tab.isActive ? .primary : .secondary)
         .background {
             if tab.isActive {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                // Concentric with the strip: 3 pt inside, so 3 pt less radius.
+                UnevenRoundedRectangle(topLeadingRadius: max(6, leadingRadius - 3), bottomLeadingRadius: 6,
+                                       bottomTrailingRadius: 6, topTrailingRadius: max(6, trailingRadius - 3))
                     .fill(groupHasFocus ? Color.accentColor.opacity(0.28) : Color.primary.opacity(0.10))
                     .padding(3)
             }

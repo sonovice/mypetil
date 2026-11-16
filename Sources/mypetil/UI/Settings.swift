@@ -104,8 +104,9 @@ private struct LayoutPane: View {
             SettingsRow("Zwischen Fenstern:") {
                 ValueSlider(value: $store.config.gap, range: 0...24, step: 1, unit: "pt")
             }
-            SettingsRow("Zum Bildschirmrand:") {
+            SettingsRow("Seitenabstand:") {
                 ValueSlider(value: $store.config.outerGap, range: 0...24, step: 1, unit: "pt")
+                Hint("Links und rechts. Oben und unten reichen die Fenster bis an den Rand.")
             }
             SettingsDivider()
             SettingsRow("Tab-Leiste:") {

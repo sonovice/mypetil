@@ -64,7 +64,8 @@ final class Workspace {
                               width: config.sidebarWidth, height: visibleFrame.height)
         tilingBounds = CGRect(x: visibleFrame.minX + config.sidebarWidth, y: visibleFrame.minY,
                               width: visibleFrame.width - config.sidebarWidth, height: visibleFrame.height)
-            .insetBy(dx: config.outerGap, dy: config.outerGap)
+            // Tiles reach the menu bar and the bottom edge; only the sides keep a margin.
+            .insetBy(dx: config.outerGap, dy: 0)
     }
 }
 
