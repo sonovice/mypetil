@@ -11,7 +11,7 @@ struct Config: Codable, Equatable {
     /// Space between tiles and the screen edges / sidebar.
     var outerGap: CGFloat = 4
     var sidebarWidth: CGFloat = 220
-    var tabBarHeight: CGFloat = 28
+    var tabBarHeight: CGFloat = 36
     /// Coloured frame around the focused window.
     var showFocusBorder = true
     var focusBorderWidth: CGFloat = 2.5
@@ -31,7 +31,7 @@ struct Config: Codable, Equatable {
     /// ⌃⌥ + key opens an app, folder or file.
     var launchers: [Launcher] = []
 
-    static let currentVersion = 2
+    static let currentVersion = 3
     static let defaultWindowCornerRadius: CGFloat =
         ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 26, minorVersion: 0, patchVersion: 0))
             ? 16 : 10
@@ -73,6 +73,7 @@ struct Config: Codable, Equatable {
             if c.gap == 8 { c.gap = Config().gap }
             if c.outerGap == 8 { c.outerGap = Config().outerGap }
         }
+        if c.configVersion < 3, c.tabBarHeight == 28 { c.tabBarHeight = Config().tabBarHeight }
         c.configVersion = Self.currentVersion
         return c
     }

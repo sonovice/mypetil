@@ -107,7 +107,7 @@ private struct LayoutPane: View {
             }
             SettingsDivider()
             SettingsRow("Tab-Leiste:") {
-                ValueSlider(value: $store.config.tabBarHeight, range: 20...40, step: 1, unit: "pt")
+                ValueSlider(value: $store.config.tabBarHeight, range: 24...52, step: 1, unit: "pt")
             }
             SettingsRow("Tab-Zone:") {
                 ValueSlider(value: $store.config.centerZoneFraction, range: 0.2...0.8, step: 0.05, unit: "%", scale: 100)

@@ -10,11 +10,21 @@ struct OverlayItem: Equatable {
         case tabTarget
     }
 
+    struct Tab: Equatable {
+        let title: String
+        let icon: NSImage?
+    }
+
     /// AX coordinates.
     let frame: CGRect
     let style: Style
-    let title: String
-    let icon: NSImage?
+    /// The windows of the tile; more than one makes it a tab group.
+    let tabs: [Tab]
+    let activeIndex: Int
+    /// Height of the tab strip at the top of the tile (0 without one).
+    var tabBarHeight: CGFloat = 0
+
+    var active: Tab { tabs[min(activeIndex, tabs.count - 1)] }
 }
 
 /// Shows gesture previews: frames only, no live window content, so dragging stays instant.
@@ -62,7 +72,8 @@ final class OverlayController {
 
     func showGhost(_ item: OverlayItem, animated: Bool) {
         let (panel, host) = ghost
-        if host.rootView.item?.style != item.style || host.rootView.item?.title != item.title {
+        if host.rootView.item?.style != item.style || host.rootView.item?.tabs != item.tabs
+            || host.rootView.item?.activeIndex != item.activeIndex {
             host.rootView = OverlayItemView(item: item)
         }
         panel.setAXFrame(item.frame, animated: animated && panel.isVisible)
@@ -90,18 +101,45 @@ struct OverlayItemView: View {
             ZStack {
                 shape.fill(.ultraThinMaterial)
                 shape.strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1.5)
-                label(item)
+                VStack(spacing: 0) {
+                    if item.tabs.count > 1 { tabStrip(item).frame(height: max(item.tabBarHeight - 2, 24)) }
+                    label(item).frame(maxHeight: .infinity)
+                }
             }
             .padding(2)
         }
     }
 
+    /// The group's tabs, laid out like its real tab strip.
+    private func tabStrip(_ item: OverlayItem) -> some View {
+        HStack(spacing: 2) {
+            ForEach(item.tabs.indices, id: \.self) { i in
+                let isActive = i == item.activeIndex
+                HStack(spacing: 5) {
+                    if let icon = item.tabs[i].icon {
+                        Image(nsImage: icon).resizable().frame(width: 18, height: 18)
+                    }
+                    Text(item.tabs[i].title)
+                        .font(.system(size: 12.5, weight: isActive ? .semibold : .regular))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .foregroundStyle(isActive ? .primary : .secondary)
+                .background(isActive ? Color.accentColor.opacity(0.28) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            }
+        }
+        .padding(4)
+    }
+
     private func label(_ item: OverlayItem) -> some View {
         VStack(spacing: 6) {
-            if let icon = item.icon {
+            if let icon = item.active.icon {
                 Image(nsImage: icon).resizable().frame(width: 40, height: 40)
             }
-            Text(item.title)
+            Text(item.active.title)
                 .font(.system(size: 14, weight: .semibold))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)

@@ -794,9 +794,13 @@ final class WindowManager {
                          windowCornerRadius: config.windowCornerRadius, animated: planChanged)
         if planChanged { overlays.show(moveOverlays(session.id, plan: plan)) }
         // After the other tiles, so the ghost stays on top of them.
-        if let w = windows[session.id] {
-            overlays.showGhost(OverlayItem(frame: border, style: plan?.isTab == true ? .tabTarget : .window,
-                                           title: w.displayTitle, icon: w.icon), animated: planChanged)
+        // Joining a group as a tab shows the group's tabs, the new one active.
+        let style: OverlayItem.Style = plan?.isTab == true ? .tabTarget : .window
+        let ghost = plan?.result.group(containing: session.id).flatMap { previewItem($0, style: style) }
+            ?? windows[session.id].map { previewItem($0, frame: border) }
+        if let ghost {
+            overlays.showGhost(OverlayItem(frame: border, style: style, tabs: ghost.tabs, activeIndex: ghost.activeIndex,
+                                           tabBarHeight: ghost.tabBarHeight), animated: planChanged)
         }
     }
 
@@ -833,12 +837,9 @@ final class WindowManager {
         session.desired = session.edges.apply(to: session.startFrame, delta: delta).rounded
         gesture = .resize(session)
         // Like a move: every tile previewed, the resized window's own tile with the focus border.
-        let (frame, others) = resizePreview(session)
+        let (frame, ghost, others) = resizePreview(session)
         overlays.show(others)
-        if let w = windows[session.id] {
-            overlays.showGhost(OverlayItem(frame: frame, style: .window, title: w.displayTitle, icon: w.icon),
-                               animated: false)
-        }
+        if let ghost { overlays.showGhost(ghost, animated: false) }
         focusBorder.show(around: frame, width: config.focusBorderWidth, windowCornerRadius: config.windowCornerRadius)
     }
 
@@ -926,14 +927,16 @@ final class WindowManager {
         }
         // A floating window has no tile; it is previewed where it is.
         if plan == nil, sourceWS == nil, case .move(let session) = gesture, let w = windows[id] {
-            items.append(OverlayItem(frame: session.startFrame, style: .window, title: w.displayTitle, icon: w.icon))
+            items.append(previewItem(w, frame: session.startFrame))
         }
         return items
     }
 
-    /// Where the resized window would end up, and preview tiles for every other tiled window.
-    private func resizePreview(_ session: ResizeSession) -> (frame: CGRect, others: [OverlayItem]) {
+    /// Where the resized window would end up, its preview tile, and preview tiles for every
+    /// other tiled window.
+    private func resizePreview(_ session: ResizeSession) -> (frame: CGRect, ghost: OverlayItem?, others: [OverlayItem]) {
         var frame = session.desired
+        var ghost = windows[session.id].map { previewItem($0, frame: frame) }
         var items: [OverlayItem] = []
         for ws in workspaces {
             var layout = ws.layout
@@ -942,19 +945,33 @@ final class WindowManager {
                 sim.applyManualResize(of: session.id, from: session.startFrame, to: session.desired,
                                       bounds: ws.tilingBounds, minSizes: minSizes, options: config.layoutOptions)
                 layout = sim.layout(in: ws.tilingBounds, minSizes: minSizes, options: config.layoutOptions)
-                frame = layout.group(containing: session.id)?.frame ?? frame
+                if let g = layout.group(containing: session.id) {
+                    frame = g.frame
+                    ghost = previewItem(g, style: .window)
+                }
             }
             items += previewTiles(layout, excluding: session.id)
         }
-        return (frame, items)
+        return (frame, ghost, items)
     }
 
     /// A preview tile (icon and title) for every tile of `layout` except the one showing `id`.
     private func previewTiles(_ layout: LayoutResult, excluding id: CGWindowID?) -> [OverlayItem] {
-        layout.groups.compactMap { g in
-            guard g.activeWindow != id, let w = windows[g.activeWindow] else { return nil }
-            return OverlayItem(frame: g.frame, style: .window, title: w.displayTitle, icon: w.icon)
-        }
+        layout.groups.compactMap { g in g.activeWindow == id ? nil : previewItem(g, style: .window) }
+    }
+
+    /// A tile's preview, with all its tabs.
+    private func previewItem(_ g: GroupLayout, style: OverlayItem.Style) -> OverlayItem? {
+        let tabs = g.windows.compactMap { windows[$0].map { OverlayItem.Tab(title: $0.displayTitle, icon: $0.icon) } }
+        guard !tabs.isEmpty else { return nil }
+        let active = g.windows.filter { windows[$0] != nil }.firstIndex(of: g.activeWindow) ?? 0
+        return OverlayItem(frame: g.frame, style: style, tabs: tabs, activeIndex: active,
+                           tabBarHeight: g.tabBarFrame?.height ?? config.tabBarHeight)
+    }
+
+    /// A single window's preview.
+    private func previewItem(_ w: ManagedWindow, frame: CGRect) -> OverlayItem {
+        OverlayItem(frame: frame, style: .window, tabs: [.init(title: w.displayTitle, icon: w.icon)], activeIndex: 0)
     }
 
     // MARK: - UI

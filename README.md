@@ -5,7 +5,7 @@ Ein Tiling-Window-Manager für macOS mit Fensterleiste am linken Bildschirmrand,
 ## Funktionen
 
 - **Automatisches Tiling (BSP):** Ein neues Fenster halbiert das fokussierte Fenster, und zwar entlang der längeren Seite.
-- **⌥ + Linksklick-Ziehen** verschiebt ein Fenster. Eine Vorschau des Fensters (Icon und Titel, mit Fokus-Rahmen) klebt an der Maus und springt auf die Zielfläche, sobald man über einem Fenster ist. Alle gekachelten Fenster werden dabei als Vorschau mit Icon und Titel gezeigt, und zwar in der Größe, die sie nach dem Ablegen hätten. Eine Live-Vorschau des Fensterinhalts gibt es bewusst nicht.
+- **⌥ + Linksklick-Ziehen** verschiebt ein Fenster. Eine Vorschau des Fensters (Icon und Titel, mit Fokus-Rahmen) klebt an der Maus und springt auf die Zielfläche, sobald man über einem Fenster ist. Alle gekachelten Fenster werden dabei als Vorschau mit Icon und Titel gezeigt, und zwar in der Größe, die sie nach dem Ablegen hätten. Tab-Gruppen zeigen in der Vorschau ihre Tabs. Eine Live-Vorschau des Fensterinhalts gibt es bewusst nicht.
   - Loslassen auf der linken, rechten, oberen oder unteren Hälfte eines Fensters halbiert dessen Platz.
   - Loslassen in der Mitte fügt das Fenster als **Tab** hinzu.
   - Funktioniert auch über Bildschirmgrenzen hinweg und mit schwebenden Fenstern (die dabei gekachelt werden).
@@ -26,8 +26,9 @@ Ein Tiling-Window-Manager für macOS mit Fensterleiste am linken Bildschirmrand,
 |---|---|
 | ⌃⌥ G | Fokussiertes Fenster schweben lassen / kacheln |
 | ⌃⌥ M | Fokussiertes Fenster maximieren / zurück (füllt die Kachelfläche, kein Vollbild) |
+| ⌃⌥ + Buchstabe/Ziffer | Eigene Kürzel: App, Ordner oder Datei öffnen (wie mit skhd) |
 
-Alles andere wird mit der Maus bedient.
+Die eigenen Kürzel legst du in den Einstellungen unter „Tastatur“ an. In der `config.json` stehen sie unter `launchers`, zum Beispiel `{"key": "t", "path": "/Applications/Ghostty.app", "newInstance": true}`. Mit `newInstance` wird die App erneut gestartet, etwa für ein weiteres Terminalfenster. Alles andere wird mit der Maus bedient.
 
 ## Bauen und starten
 
@@ -57,7 +58,8 @@ Sources/MypetilCore/      reine Layout-Logik, ohne AppKit, vollständig getestet
   Geometry.swift            Drop-Zonen, Resize-Kanten
 Sources/mypetil/
   WindowManager.swift       Zustand und Orchestrierung: AX-Events → Baum → Fensterrahmen
-  InputController.swift     CGEvent-Tap: ⌥-Drag, ⌥-Resize, Tab-Klicks, ⌃⌥G, ⌃⌥M
+  InputController.swift     CGEvent-Tap: ⌥-Drag, ⌥-Resize, Tab-Klicks, Tastenkürzel
+  Launcher.swift            ⌃⌥ + Taste öffnet App, Ordner oder Datei
   Spaces.swift              Desktops (lesende SkyLight-Abfragen)
   AX/                       Accessibility-Wrapper und AXObserver je App
   UI/                       Seitenleiste, Tab-Leisten, Overlays, Fokus-Rahmen, Einstellungen
