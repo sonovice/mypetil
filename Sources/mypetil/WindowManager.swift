@@ -536,8 +536,13 @@ final class WindowManager {
 
     /// A window moved or resized. Wait until the user lets go, then react.
     private func frameChanged(_ id: CGWindowID) {
-        guard gesture == nil, let w = windows[id] else { return }
-        if syncFullScreen(w) { return }
+        guard let w = windows[id] else { return }
+        if syncFullScreen(w) {
+            updateFocusBorder()
+            return
+        }
+        if id == focusedID { updateFocusBorder() }
+        guard gesture == nil else { return }
         guard workspace(containing: id) != nil, unverified[id] == nil,
               let expected = expectedFrames[id], let actual = w.element.frame,
               !actual.isClose(to: expected) else { return }
@@ -857,11 +862,9 @@ final class WindowManager {
     private func refreshUI() {
         uiScheduled = false
         var strips: [TabStrip] = []
-        var focusFrame: CGRect?
         for ws in workspaces {
             for g in ws.layout.groups {
                 let hasFocus = g.windows.contains { $0 == focusedID }
-                if hasFocus { focusFrame = ws.zoomed == g.activeWindow ? ws.tilingBounds : g.frame }
                 // A maximized window covers the tiles; their tab strips would float above it.
                 guard let bar = g.tabBarFrame, ws.zoomed == nil else { continue }
                 let tabs = g.windows.compactMap { id in windows[id].map { TabStrip.Tab(window: $0, isActive: id == g.activeWindow) } }
@@ -869,13 +872,32 @@ final class WindowManager {
             }
         }
         tabBars.show(strips)
-        if config.showFocusBorder, let focusFrame {
-            focusBorder.show(around: focusFrame, width: config.focusBorderWidth,
-                             windowCornerRadius: config.windowCornerRadius)
-        } else {
-            focusBorder.hide()
-        }
+        updateFocusBorder()
         sidebars.update(sidebarContent())
+    }
+
+    /// Draws the focus border around where the focused window actually is right now, so it
+    /// follows the window while it is dragged or resized, and also frames floating windows.
+    private func updateFocusBorder() {
+        guard config.showFocusBorder, let id = focusedID, let w = windows[id],
+              !w.isMinimized, !parkedTabs.contains(id), !fullScreen.contains(id), !hiddenApps.contains(w.pid),
+              isOnVisibleSpace(w), let actual = w.element.frame else {
+            focusBorder.hide()
+            return
+        }
+        var frame = actual
+        // A window resting in its tile shares the border with its tab strip.
+        if let ws = workspace(containing: id), ws.zoomed != id, let g = ws.layout.group(containing: id),
+           g.tabBarFrame != nil, actual.isClose(to: g.windowFrame, tolerance: 4) {
+            frame = g.frame
+        }
+        focusBorder.show(around: frame, width: config.focusBorderWidth, windowCornerRadius: config.windowCornerRadius)
+    }
+
+    private func isOnVisibleSpace(_ w: ManagedWindow) -> Bool {
+        if let ws = workspace(containing: w.id) { return workspaces.contains { $0 === ws } }
+        guard let space = Spaces.space(of: w.id) else { return true }
+        return workspaces.contains { $0.key.spaceID == space }
     }
 
     private func sidebarContent() -> [CGDirectDisplayID: SidebarContent] {
