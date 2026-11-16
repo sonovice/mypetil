@@ -1,4 +1,3 @@
-import Foundation
 import CoreGraphics
 import Testing
 @testable import MypetilCore
@@ -343,31 +342,57 @@ private func frame(_ w: WindowID, _ r: LayoutResult) -> CGRect? { r.group(contai
     }
 }
 
-@Suite struct SnapshotTests {
-    @Test func roundTripKeepsTheLayout() throws {
+
+@Suite struct InferenceTests {
+    private let gapped = LayoutOptions(gap: 6, tabBarHeight: 20)
+
+    /// Builds a layout, takes its frames as "the windows on screen" and infers it back.
+    private func roundTrip(_ build: (LayoutTree) -> Void) -> (LayoutResult, LayoutResult) {
         let t = LayoutTree()
-        t.insert(1, near: nil, bounds: bounds, options: noGap)
-        t.insert(2, near: 1, bounds: bounds, options: noGap)
-        t.insert(3, near: 2, bounds: bounds, options: noGap)
-        t.drop(4, onto: 3, zone: .center)
-        t.applyManualResize(of: 1, from: CGRect(x: 0, y: 0, width: 500, height: 600),
-                            to: CGRect(x: 0, y: 0, width: 300, height: 600), bounds: bounds, options: noGap)
-        let data = try JSONEncoder().encode(try #require(t.snapshot))
-        let restored = LayoutTree()
-        restored.restore(try JSONDecoder().decode(LayoutSnapshot.self, from: data))
-        #expect(restored.layout(in: bounds, options: noGap) == t.layout(in: bounds, options: noGap))
+        build(t)
+        let original = t.layout(in: bounds, options: gapped)
+        let onScreen = original.groups.flatMap { g in g.windows.map { (id: $0, frame: g.windowFrame) } }
+        let inferred = LayoutTree()
+        inferred.rebuild(from: onScreen, in: bounds, options: gapped)
+        return (original, inferred.layout(in: bounds, options: gapped))
     }
 
-    @Test func missingWindowsLeaveNoHoles() throws {
+    @Test func reproducesNestedSplitsAndRatios() {
+        let (original, inferred) = roundTrip { t in
+            t.insert(1, near: nil, bounds: bounds, options: gapped)
+            t.insert(2, near: 1, bounds: bounds, options: gapped)
+            t.insert(3, near: 2, bounds: bounds, options: gapped)
+            t.insert(4, near: 1, bounds: bounds, options: gapped)
+            t.applyManualResize(of: 1, from: CGRect(x: 0, y: 0, width: 497, height: 297),
+                                to: CGRect(x: 0, y: 0, width: 397, height: 297), bounds: bounds, options: gapped)
+        }
+        #expect(inferred == original)
+    }
+
+    @Test func sameFrameBecomesATabGroup() {
+        let (original, inferred) = roundTrip { t in
+            t.insert(1, near: nil, bounds: bounds, options: gapped)
+            t.insert(2, near: 1, bounds: bounds, options: gapped)
+            t.drop(3, onto: 2, zone: .center)
+        }
+        #expect(inferred.groups.map(\.frame) == original.groups.map(\.frame))
+        #expect(Set(inferred.group(containing: 3)?.windows ?? []) == [2, 3])
+    }
+
+    @Test func frontMostTabIsActive() {
+        let f = CGRect(x: 0, y: 20, width: 1000, height: 580)
         let t = LayoutTree()
-        t.insert(1, near: nil, bounds: bounds, options: noGap)
-        t.insert(2, near: 1, bounds: bounds, options: noGap)
-        t.insert(3, near: 2, bounds: bounds, options: noGap)
-        let restored = LayoutTree()
-        restored.restore(try #require(t.snapshot), keeping: { $0 != 2 })
-        #expect(restored.windows == [1, 3])
-        let r = restored.layout(in: bounds, options: noGap)
-        #expect(frame(1, r)?.width == 500)
-        #expect(frame(3, r)?.width == 500)
+        t.rebuild(from: [(id: 7, frame: f), (id: 5, frame: f)], in: bounds, options: gapped)
+        #expect(t.layout(in: bounds, options: gapped).groups.first?.activeWindow == 7)
+    }
+
+    @Test func overlappingWindowsAreSeparated() {
+        let t = LayoutTree()
+        t.rebuild(from: [(id: 1, frame: CGRect(x: 100, y: 100, width: 600, height: 400)),
+                         (id: 2, frame: CGRect(x: 300, y: 150, width: 600, height: 400))],
+                  in: bounds, options: gapped)
+        let r = t.layout(in: bounds, options: gapped)
+        #expect(r.groups.count == 2)
+        #expect(frame(1, r)!.maxX < frame(2, r)!.minX)
     }
 }

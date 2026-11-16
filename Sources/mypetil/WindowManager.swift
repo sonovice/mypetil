@@ -41,9 +41,9 @@ final class WindowManager {
     private var isMouseDown = false
     private var lastMouseUp: TimeInterval = 0
 
-    /// Windows floated by hand in a previous run, applied when they are adopted again.
-    private var savedFloating: Set<CGWindowID> = []
-    private var saveWork: DispatchWorkItem?
+    /// While the windows that already exist are being discovered: they are not tiled one by
+    /// one but arranged as a whole from where they are (see `inferLayouts`).
+    private var isStarting = false
 
     private var layoutScheduled = false
     private var uiScheduled = false
@@ -79,7 +79,6 @@ final class WindowManager {
             resize: { [weak self] width, final in self?.resizeSidebar(to: width, final: final) }
         )
         store.onChange = { [weak self] new in self?.apply(config: new) }
-        restoreSavedLayout()
         rebuildWorkspaces()
 
         let nc = NSWorkspace.shared.notificationCenter
@@ -106,21 +105,17 @@ final class WindowManager {
             MainActor.assumeIsolated { self?.rebuildWorkspaces() }
         }
 
+        isStarting = true
         for app in NSWorkspace.shared.runningApplications { observe(app) }
+        isStarting = false
+        inferLayouts()
         if let front = NSWorkspace.shared.frontmostApplication { updateFocus(front.processIdentifier) }
         layoutNow()
-        // Restored tiles whose window did not turn up (closed meanwhile, no longer a
-        // standard window) would leave holes. Apps that are slow to answer get some time.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.dropUnclaimedTiles() }
     }
 
-    /// Saves the layout and brings parked tabs back on screen, so nothing is lost when mypetil quits.
-    func prepareForQuit() {
-        saveLayout()
-        restoreParkedWindows()
-    }
-
-    private func restoreParkedWindows() {
+    /// Brings parked tabs back on screen so nothing is lost when mypetil quits. They land on
+    /// their tab's frame, so the next start recognises the tab group again.
+    func restoreParkedWindows() {
         for ws in allWorkspaces.values {
             for g in ws.layout.groups {
                 for id in g.windows where parkedTabs.contains(id) {
@@ -144,44 +139,34 @@ final class WindowManager {
     }
 
 
-    // MARK: - Saved layout
+    // MARK: - Arranging existing windows
 
-    private func restoreSavedLayout() {
-        guard let saved = SavedLayout.load() else { return }
-        for entry in saved.workspaces {
-            let ws = workspace(for: WorkspaceKey(displayID: entry.displayID, spaceID: entry.spaceID))
-            ws.tree.restore(entry.tree, keeping: Spaces.windowExists)
-            ws.zoomed = entry.zoomed.flatMap { ws.tree.contains($0) ? $0 : nil }
+    /// Turns the current arrangement of the windows found at start into layout trees, one per
+    /// workspace, so a restart of mypetil keeps windows where they are as far as possible.
+    private func inferLayouts() {
+        let zOrder = Self.windowZOrder()
+        var byWorkspace: [ObjectIdentifier: (ws: Workspace, windows: [ManagedWindow])] = [:]
+        for w in windows.values where isTileable(w) && workspace(containing: w.id) == nil {
+            guard let ws = homeWorkspace(of: w) else { continue }
+            byWorkspace[ObjectIdentifier(ws), default: (ws, [])].windows.append(w)
         }
-        savedFloating = Set(saved.floating.filter(Spaces.windowExists))
-    }
-
-    private func dropUnclaimedTiles() {
-        for ws in workspaces {
-            for id in ws.tree.windows where windows[id] == nil { ws.tree.remove(id) }
+        for (ws, found) in byWorkspace.values {
+            let frontToBack = found.sorted { (zOrder[$0.id] ?? .max, $0.id) < (zOrder[$1.id] ?? .max, $1.id) }
+            let frames = frontToBack.map { w in (id: w.id, frame: w.element.frame ?? ws.tilingBounds) }
+            ws.tree.rebuild(from: frames, in: ws.tilingBounds, options: config.layoutOptions)
         }
-        savedFloating.removeAll()
         setNeedsLayout()
     }
 
-    private func scheduleSave() {
-        saveWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.saveLayout() }
-        saveWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
-    }
-
-    private func saveLayout() {
-        saveWork?.cancel()
-        saveWork = nil
-        var saved = SavedLayout()
-        saved.workspaces = allWorkspaces.values.compactMap { ws in
-            ws.tree.snapshot.map {
-                SavedLayout.SavedWorkspace(displayID: ws.key.displayID, spaceID: ws.key.spaceID, tree: $0, zoomed: ws.zoomed)
-            }
+    /// Position of every on-screen window in the window stack, front-most first.
+    private static func windowZOrder() -> [CGWindowID: Int] {
+        let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+            as? [[String: Any]] ?? []
+        var order: [CGWindowID: Int] = [:]
+        for (i, info) in list.enumerated() {
+            if let id = info[kCGWindowNumber as String] as? CGWindowID { order[id] = i }
         }
-        saved.floating = windows.values.filter(\.isFloating).map(\.id) + savedFloating
-        saved.save()
+        return order
     }
 
     // MARK: - Discovery
@@ -227,14 +212,7 @@ final class WindowManager {
         windows[id] = w
         observers[pid]?.watch(element, id: id)
         if element.bool(AXAttr.fullScreen) == true { fullScreen.insert(id) }
-        if savedFloating.remove(id) != nil { w.isFloating = true }
-        if !isTileable(w) {
-            untileQuietly(id)
-        } else if workspace(containing: id) == nil {
-            tile(w)
-        } else {
-            setNeedsLayout()   // restored from the saved layout
-        }
+        if isTileable(w), !isStarting { tile(w) }
         // The focus notification of a new window often arrives before we know the window.
         if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { updateFocus(pid) }
         setNeedsUI()
@@ -409,7 +387,6 @@ final class WindowManager {
         layoutScheduled = false
         for ws in workspaces { apply(ws) }
         setNeedsUI()
-        scheduleSave()
     }
 
     private func apply(_ ws: Workspace) {
