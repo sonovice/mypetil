@@ -2,7 +2,8 @@ import AppKit
 import ServiceManagement
 import SwiftUI
 
-/// The classic macOS preferences window. Every change applies immediately.
+/// The classic macOS preferences window: icon tabs in the toolbar, right-aligned labels.
+/// Every change applies immediately.
 @MainActor
 final class SettingsWindowController {
     private let store: ConfigStore
@@ -13,68 +14,67 @@ final class SettingsWindowController {
     }
 
     func show() {
-        if window == nil {
-            let controller = NSHostingController(rootView: SettingsView(store: store))
-            let window = NSWindow(contentViewController: controller)
-            window.title = "mypetil Einstellungen"
-            window.styleMask = [.titled, .closable]
-            window.isReleasedWhenClosed = false
-            window.center()
-            self.window = window
-        }
+        if window == nil { window = makeWindow() }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
     }
-}
 
-struct SettingsView: View {
-    @Bindable var store: ConfigStore
+    private func makeWindow() -> NSWindow {
+        let tabs = NSTabViewController()
+        tabs.tabStyle = .toolbar
+        tabs.transitionOptions = [.allowUserInteraction]
+        tabs.addTabViewItem(pane("Allgemein", "gearshape", GeneralPane(store: store)))
+        tabs.addTabViewItem(pane("Layout", "rectangle.split.3x1", LayoutPane(store: store)))
+        tabs.addTabViewItem(pane("Schwebend", "macwindow.on.rectangle", FloatingPane(store: store)))
+        tabs.addTabViewItem(pane("Bedienung", "computermouse", ControlsPane()))
 
-    var body: some View {
-        TabView {
-            GeneralSettings(store: store)
-                .tabItem { Label("Allgemein", systemImage: "gearshape") }
-            LayoutSettings(store: store)
-                .tabItem { Label("Layout", systemImage: "rectangle.split.3x1") }
-            FloatingSettings(store: store)
-                .tabItem { Label("Schwebend", systemImage: "macwindow.on.rectangle") }
-            ControlsHelp()
-                .tabItem { Label("Bedienung", systemImage: "computermouse") }
-        }
-        .frame(width: 520)
-        .fixedSize(horizontal: false, vertical: true)
+        let window = NSWindow(contentViewController: tabs)
+        window.styleMask = [.titled, .closable]
+        window.toolbarStyle = .preference
+        window.isReleasedWhenClosed = false
+        window.center()
+        return window
+    }
+
+    private func pane<Content: View>(_ title: String, _ symbol: String, _ content: Content) -> NSTabViewItem {
+        let host = NSHostingController(rootView: content.padding(.horizontal, 30).padding(.vertical, 22).frame(width: 520))
+        // The window follows each pane's size when switching tabs.
+        host.sizingOptions = [.preferredContentSize]
+        let item = NSTabViewItem(viewController: host)
+        item.label = title
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+        return item
     }
 }
 
-// MARK: - Tabs
+// MARK: - Panes
 
-private struct GeneralSettings: View {
+private struct GeneralPane: View {
     @Bindable var store: ConfigStore
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
 
     var body: some View {
-        Form {
-            Section {
+        SettingsGrid {
+            SettingsRow("Autostart:") {
                 Toggle("Beim Anmelden starten", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in setLaunchAtLogin(enabled) }
-                if let loginError {
-                    Text(loginError).font(.caption).foregroundStyle(.secondary)
-                }
+                if let loginError { Hint(loginError) }
             }
-            Section("Fokus") {
-                Toggle("Rahmen um aktives Fenster", isOn: $store.config.showFocusBorder)
-                PointSlider(title: "Rahmenstärke", value: $store.config.focusBorderWidth, range: 1...6, step: 0.5)
+            SettingsDivider()
+            SettingsRow("Fokus:") {
+                Toggle("Rahmen um das aktive Fenster", isOn: $store.config.showFocusBorder)
+            }
+            SettingsRow("Rahmenstärke:") {
+                ValueSlider(value: $store.config.focusBorderWidth, range: 1...6, step: 0.5, unit: "pt")
                     .disabled(!store.config.showFocusBorder)
             }
-            Section("Seitenleiste") {
-                PointSlider(title: "Breite", value: $store.config.sidebarWidth,
-                            range: Config.sidebarWidthRange, step: 10)
-                Text("Die Breite lässt sich auch direkt an der rechten Kante der Seitenleiste ziehen.")
-                    .font(.caption).foregroundStyle(.secondary)
+            SettingsDivider()
+            SettingsRow("Seitenleiste:") {
+                ValueSlider(value: $store.config.sidebarWidth, range: Config.sidebarWidthRange, step: 10, unit: "pt")
+                Hint("Lässt sich auch an der rechten Kante der Seitenleiste ziehen.")
             }
         }
-        .formStyle(.grouped)
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
@@ -88,116 +88,183 @@ private struct GeneralSettings: View {
     }
 }
 
-private struct LayoutSettings: View {
+private struct LayoutPane: View {
     @Bindable var store: ConfigStore
 
     var body: some View {
-        Form {
-            Section("Abstände") {
-                PointSlider(title: "Zwischen Fenstern", value: $store.config.gap, range: 0...24, step: 1)
-                PointSlider(title: "Zum Bildschirmrand", value: $store.config.outerGap, range: 0...24, step: 1)
+        SettingsGrid {
+            SettingsRow("Zwischen Fenstern:") {
+                ValueSlider(value: $store.config.gap, range: 0...24, step: 1, unit: "pt")
             }
-            Section("Tabs") {
-                PointSlider(title: "Höhe der Tab-Leiste", value: $store.config.tabBarHeight, range: 20...40, step: 1)
-                LabeledContent("Tab-Zone beim Ablegen") {
-                    HStack {
-                        Slider(value: $store.config.centerZoneFraction, in: 0.2...0.8, step: 0.05)
-                        Text("\(Int(store.config.centerZoneFraction * 100)) %")
-                            .monospacedDigit().frame(width: 44, alignment: .trailing)
-                    }
-                }
-                Text("Anteil der Fenstermitte, in dem ein abgelegtes Fenster zum Tab wird.")
-                    .font(.caption).foregroundStyle(.secondary)
+            SettingsRow("Zum Bildschirmrand:") {
+                ValueSlider(value: $store.config.outerGap, range: 0...24, step: 1, unit: "pt")
+            }
+            SettingsDivider()
+            SettingsRow("Tab-Leiste:") {
+                ValueSlider(value: $store.config.tabBarHeight, range: 20...40, step: 1, unit: "pt")
+            }
+            SettingsRow("Tab-Zone:") {
+                ValueSlider(value: $store.config.centerZoneFraction, range: 0.2...0.8, step: 0.05, unit: "%", scale: 100)
+                Hint("Anteil der Fenstermitte, in dem ein abgelegtes Fenster zum Tab wird.")
             }
         }
-        .formStyle(.grouped)
     }
 }
 
-private struct FloatingSettings: View {
+private struct FloatingPane: View {
     @Bindable var store: ConfigStore
+    @State private var selection: String?
 
     var body: some View {
-        Form {
-            Section {
-                if store.config.floatingApps.isEmpty {
-                    Text("Keine Apps").foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Fenster dieser Apps werden nie gekachelt:")
+            VStack(spacing: 0) {
+                List(store.config.floatingApps, id: \.self, selection: $selection) { bundleID in
+                    AppLabel(bundleID: bundleID)
                 }
-                ForEach(store.config.floatingApps, id: \.self) { bundleID in
-                    HStack {
-                        AppLabel(bundleID: bundleID)
-                        Spacer()
-                        Button {
-                            store.config.floatingApps.removeAll { $0 == bundleID }
-                        } label: {
-                            Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
+                .listStyle(.bordered(alternatesRowBackgrounds: true))
+                .frame(height: 200)
+                HStack(spacing: 0) {
+                    Menu {
+                        ForEach(addableApps, id: \.bundleIdentifier) { app in
+                            Button(app.localizedName ?? app.bundleIdentifier ?? "?") {
+                                if let id = app.bundleIdentifier { store.config.floatingApps.append(id) }
+                            }
                         }
-                        .buttonStyle(.borderless)
-                        .help("Entfernen")
+                    } label: {
+                        Image(systemName: "plus")
                     }
-                }
-            } header: {
-                Text("Apps, deren Fenster nie gekachelt werden")
-            } footer: {
-                Menu("App hinzufügen …") {
-                    ForEach(addableApps, id: \.bundleIdentifier) { app in
-                        Button(app.localizedName ?? app.bundleIdentifier ?? "?") {
-                            if let id = app.bundleIdentifier { store.config.floatingApps.append(id) }
-                        }
+                    .menuIndicator(.hidden)
+                    .menuStyle(.borderlessButton)
+                    .frame(width: 24, height: 20)
+                    .help("App hinzufügen")
+                    Divider().frame(height: 16)
+                    Button {
+                        if let selection { store.config.floatingApps.removeAll { $0 == selection } }
+                        selection = nil
+                    } label: {
+                        Image(systemName: "minus").frame(width: 24, height: 20)
                     }
+                    .buttonStyle(.borderless)
+                    .disabled(selection == nil)
+                    .help("Ausgewählte App entfernen")
+                    Spacer()
                 }
-                .fixedSize()
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .overlay(alignment: .top) { Divider() }
             }
+            .overlay(RoundedRectangle(cornerRadius: 0).stroke(Color(nsColor: .separatorColor)))
+            Hint("Einzelne Fenster schweben lassen: ⌃⌥F oder Rechtsklick in der Seitenleiste.")
         }
-        .formStyle(.grouped)
     }
 
     private var addableApps: [NSRunningApplication] {
         NSWorkspace.shared.runningApplications
-            .filter { $0.activationPolicy == .regular && $0.bundleIdentifier != nil
-                && !store.config.floatingApps.contains($0.bundleIdentifier!) && $0.processIdentifier != getpid() }
+            .filter { app in
+                guard app.activationPolicy == .regular, let id = app.bundleIdentifier else { return false }
+                return !store.config.floatingApps.contains(id) && app.processIdentifier != getpid()
+            }
             .sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") }
     }
 }
 
-private struct ControlsHelp: View {
+private struct ControlsPane: View {
     var body: some View {
-        Form {
-            Section("Maus") {
-                LabeledContent("⌥ + Linksklick ziehen", value: "Fenster verschieben")
-                LabeledContent("… auf Fensterhälfte ablegen", value: "Platz teilen")
-                LabeledContent("… in Fenstermitte ablegen", value: "Als Tab hinzufügen")
-                LabeledContent("⌥ + Rechtsklick ziehen", value: "Größe ändern")
-                LabeledContent("Tab anklicken / herausziehen", value: "Wechseln / lösen")
-                LabeledContent("Fensterrand ziehen", value: "Nachbarn passen sich an")
-                LabeledContent("Doppelklick Titelleiste", value: "Maximieren")
-                LabeledContent("Esc während des Ziehens", value: "Abbrechen")
-            }
-            Section("Tastatur") {
-                LabeledContent("⌃⌥F", value: "Fenster schweben lassen / kacheln")
-            }
+        SettingsGrid {
+            SettingsRow("⌥ + Linksklick ziehen:") { Text("Fenster verschieben") }
+            SettingsRow("… auf Fensterhälfte:") { Text("Platz teilen") }
+            SettingsRow("… in Fenstermitte:") { Text("Als Tab hinzufügen") }
+            SettingsRow("⌥ + Rechtsklick ziehen:") { Text("Größe ändern (Ecke oder Kante)") }
+            SettingsRow("Esc während des Ziehens:") { Text("Abbrechen") }
+            SettingsDivider()
+            SettingsRow("Fensterrand ziehen:") { Text("Nachbarfenster passen sich an") }
+            SettingsRow("Doppelklick Titelleiste:") { Text("Maximieren") }
+            SettingsRow("Tab anklicken / ziehen:") { Text("Wechseln / herauslösen") }
+            SettingsDivider()
+            SettingsRow("⌃⌥F:") { Text("Fenster schweben lassen / kacheln") }
         }
-        .formStyle(.grouped)
     }
 }
 
-// MARK: - Controls
+// MARK: - Building blocks
 
-private struct PointSlider: View {
-    let title: String
+/// Two columns: right-aligned labels, left-aligned controls.
+private struct SettingsGrid<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 12) {
+            content
+        }
+        .toggleStyle(.checkbox)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct SettingsRow<Content: View>: View {
+    let label: String
+    @ViewBuilder let content: Content
+
+    init(_ label: String, @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.content = content()
+    }
+
+    var body: some View {
+        GridRow {
+            Text(label)
+                .gridColumnAlignment(.trailing)
+            VStack(alignment: .leading, spacing: 4) {
+                content
+            }
+        }
+    }
+}
+
+private struct SettingsDivider: View {
+    var body: some View {
+        Divider()
+            .gridCellUnsizedAxes(.horizontal)
+            .padding(.vertical, 4)
+    }
+}
+
+private struct ValueSlider: View {
     @Binding var value: CGFloat
     let range: ClosedRange<CGFloat>
     let step: CGFloat
+    let unit: String
+    var scale: CGFloat = 1
 
     var body: some View {
-        LabeledContent(title) {
-            HStack {
-                Slider(value: $value, in: range, step: step)
-                Text(value.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(value)) pt" : String(format: "%.1f pt", value))
-                    .monospacedDigit()
-                    .frame(width: 52, alignment: .trailing)
-            }
+        HStack(spacing: 10) {
+            Slider(value: $value, in: range, step: step)
+                .frame(width: 200)
+            Text(formatted)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: 56, alignment: .leading)
         }
+    }
+
+    private var formatted: String {
+        let v = value * scale
+        return (v.rounded() == v ? "\(Int(v))" : String(format: "%.1f", v)) + " " + unit
+    }
+}
+
+private struct Hint: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 300, alignment: .leading)
     }
 }
 
@@ -207,15 +274,17 @@ private struct AppLabel: View {
     var body: some View {
         let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
         HStack(spacing: 8) {
-            if let url {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable().frame(width: 20, height: 20)
-            }
-            VStack(alignment: .leading, spacing: 0) {
-                Text(url.map { FileManager.default.displayName(atPath: $0.path) } ?? bundleID)
-                if url != nil {
-                    Text(bundleID).font(.caption).foregroundStyle(.secondary)
+            Group {
+                if let url {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable()
+                } else {
+                    Image(systemName: "questionmark.app").resizable()
                 }
             }
+            .frame(width: 18, height: 18)
+            Text(url.map { FileManager.default.displayName(atPath: $0.path) } ?? bundleID)
+            Spacer()
+            Text(bundleID).font(.caption).foregroundStyle(.tertiary)
         }
     }
 }
