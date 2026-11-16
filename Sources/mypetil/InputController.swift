@@ -18,8 +18,17 @@ final class InputController {
     private enum State {
         case idle
         case tabPressed(TabHit, at: CGPoint)
-        case moving
+        /// Left button down on a window without modifiers: maybe the start of a title-bar drag.
+        /// `last` is the latest position the app has seen.
+        case windowPressed(CGWindowID, at: CGPoint, frame: CGRect, last: CGPoint)
+        /// A mypetil move. For a hijacked title-bar drag, `releaseAt` is where the app gets
+        /// its mouse-up, so the system's drag ends where it was stopped.
+        case moving(releaseAt: CGPoint?)
+        /// A floating window dragged natively by its title bar; only the border is ours.
+        case followingDrag(CGWindowID, at: CGPoint, frame: CGRect)
         case resizing
+        /// A gesture cancelled with Esc: the rest of the drag is swallowed.
+        case cancelled(releaseAt: CGPoint?)
     }
 
     private let wm: WindowManager
@@ -67,21 +76,33 @@ final class InputController {
                 return nil
             }
             if flags == .maskAlternate, let id = Self.windowUnder(point), wm.isManaged(id) {
-                state = .moving
+                state = .moving(releaseAt: nil)
                 wm.beginMove(id, at: point)
                 return nil
+            }
+            if flags.isEmpty, let id = Self.windowUnder(point), wm.isManaged(id), let frame = wm.frame(of: id) {
+                state = .windowPressed(id, at: point, frame: frame, last: point)
             }
 
         case (.leftMouseDragged, .tabPressed(let tab, let start)):
             if hypot(point.x - start.x, point.y - start.y) > 5 {
-                state = .moving
+                state = .moving(releaseAt: nil)
                 wm.beginMove(tab.window, at: start)
                 wm.updateMove(at: point)
             }
             return nil
 
+        case (.leftMouseDragged, .windowPressed(let id, let start, let frame, let last)):
+            return titleBarDrag(id, start: start, frame: frame, last: last, point: point, event: event)
+
         case (.leftMouseDragged, .moving):
             wm.updateMove(at: point)
+            return nil
+
+        case (.leftMouseDragged, .followingDrag(let id, let start, let frame)):
+            wm.followTitleBarDrag(id, windowFrame: frame.offsetBy(dx: point.x - start.x, dy: point.y - start.y))
+
+        case (.leftMouseDragged, .cancelled):
             return nil
 
         case (.leftMouseUp, .tabPressed(let tab, _)):
@@ -89,10 +110,21 @@ final class InputController {
             if tab.isCloseButton { wm.close(tab.window) } else { wm.focus(tab.window) }
             return nil
 
-        case (.leftMouseUp, .moving):
+        case (.leftMouseUp, .moving(let releaseAt)):
             state = .idle
             wm.endMove()
-            return nil
+            return release(event, at: releaseAt)
+
+        case (.leftMouseUp, .cancelled(let releaseAt)):
+            state = .idle
+            return release(event, at: releaseAt)
+
+        case (.leftMouseUp, .followingDrag):
+            state = .idle
+            wm.endTitleBarDrag()
+
+        case (.leftMouseUp, .windowPressed):
+            state = .idle
 
         case (.rightMouseDown, .idle):
             if flags == .maskAlternate, let id = Self.windowUnder(point), wm.isManaged(id), wm.beginResize(id, at: point) {
@@ -111,8 +143,9 @@ final class InputController {
 
         case (.keyDown, _):
             let key = Int(event.getIntegerValueField(.keyboardEventKeycode))
-            if key == kVK_Escape, case .moving = state {
-                reset()
+            if key == kVK_Escape, case .moving(let releaseAt) = state {
+                wm.cancelGesture()
+                state = .cancelled(releaseAt: releaseAt)
                 return nil
             }
             if key == kVK_Escape, case .resizing = state {
@@ -141,10 +174,51 @@ final class InputController {
         }
     }
 
+    /// Decides whether a plain drag on a window moves it by its title bar: the window follows
+    /// the mouse (whatever the app's title bar looks like). Tiled windows are then taken over
+    /// by mypetil; floating ones keep moving natively, with the border following the mouse.
+    private func titleBarDrag(_ id: CGWindowID, start: CGPoint, frame: CGRect, last: CGPoint,
+                              point: CGPoint, event: CGEvent) -> Unmanaged<CGEvent>? {
+        let pass = Unmanaged.passUnretained(event)
+        let distance = hypot(point.x - start.x, point.y - start.y)
+        guard distance > 4 else {
+            state = .windowPressed(id, at: start, frame: frame, last: point)
+            return pass
+        }
+        guard let now = wm.frame(of: id) else {
+            state = .idle
+            return pass
+        }
+        let moved = hypot(now.minX - frame.minX, now.minY - frame.minY) > 1
+        let sameSize = abs(now.width - frame.width) < 2 && abs(now.height - frame.height) < 2
+        guard moved, sameSize else {
+            // Selecting text, dragging a file …: not ours. Give up once clearly something else.
+            state = distance > 40 ? .idle : .windowPressed(id, at: start, frame: frame, last: point)
+            return pass
+        }
+        if wm.isTiled(id) {
+            state = .moving(releaseAt: last)
+            wm.beginTitleBarMove(id, grabbedAt: start, windowFrame: frame)
+            wm.updateMove(at: point)
+            return nil
+        }
+        state = .followingDrag(id, at: start, frame: frame)
+        wm.followTitleBarDrag(id, windowFrame: frame.offsetBy(dx: point.x - start.x, dy: point.y - start.y))
+        return pass
+    }
+
+    /// Ends a gesture's mouse-up: swallowed, or handed to the app at `point`.
+    private func release(_ event: CGEvent, at point: CGPoint?) -> Unmanaged<CGEvent>? {
+        guard let point else { return nil }
+        event.location = point
+        return Unmanaged.passUnretained(event)
+    }
+
     private func reset() {
         switch state {
         case .moving, .resizing: wm.cancelGesture()
-        case .idle, .tabPressed: break
+        case .followingDrag: wm.endTitleBarDrag()
+        case .idle, .tabPressed, .windowPressed, .cancelled: break
         }
         state = .idle
     }

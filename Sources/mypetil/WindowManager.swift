@@ -49,6 +49,8 @@ final class WindowManager {
     private var uiScheduled = false
     private var verifyScheduled = false
     private var gesture: Gesture?
+    /// A floating window dragged by its title bar; the event tap drives its border.
+    private var nativeDrag: CGWindowID?
 
     private let overlays = OverlayController()
     private let focusBorder = FocusBorder()
@@ -777,8 +779,8 @@ final class WindowManager {
     /// Starts dragging `id` (⌥ + left mouse, or a tab pulled out of its strip) grabbed at `point`.
     /// The window itself stays put; the focus border travels with the mouse and snaps onto
     /// the landing spot, and windows that would change size show their new frame.
-    func beginMove(_ id: CGWindowID, at point: CGPoint) {
-        guard let w = windows[id], let frame = borderFrame(of: w) else { return }
+    func beginMove(_ id: CGWindowID, at point: CGPoint, windowFrame: CGRect? = nil) {
+        guard let w = windows[id], let frame = borderFrame(of: w, actual: windowFrame) else { return }
         gesture = .move(MoveSession(id: id, startMouse: point, startFrame: frame))
         overlays.show(moveOverlays(id, plan: nil))
         updateMove(at: point)
@@ -809,7 +811,51 @@ final class WindowManager {
     func endMove() {
         guard case .move(let session) = gesture else { return }
         cancelGesture()
-        if let plan = session.plan { performDrop(session.id, plan: plan) }
+        if let plan = session.plan {
+            performDrop(session.id, plan: plan)
+        } else {
+            // Released over nothing: make sure the window is (back) in its tile.
+            targetFrames[session.id] = nil
+            layoutNow()
+        }
+    }
+
+    // MARK: Native title-bar drags
+
+    func isTiled(_ id: CGWindowID) -> Bool { workspace(containing: id) != nil }
+
+    /// Where the window server shows the window right now. Unlike the app's AX frame this is
+    /// current during a drag, so the tap can tell at once whether a drag moves the window.
+    func frame(of id: CGWindowID) -> CGRect? {
+        guard windows[id] != nil,
+              let info = (CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]])?.first,
+              let bounds = info[kCGWindowBounds as String] as? NSDictionary else { return nil }
+        return CGRect(dictionaryRepresentation: bounds)
+    }
+
+    /// The user started dragging a tiled window by its title bar, and the event tap stopped
+    /// the system's drag. The window goes back to where it was and the drag continues as a
+    /// mypetil move, with the same previews as ⌥-drag.
+    func beginTitleBarMove(_ id: CGWindowID, grabbedAt point: CGPoint, windowFrame: CGRect) {
+        guard let w = windows[id] else { return }
+        settleWork.removeValue(forKey: id)?.cancel()
+        touchedByUser.remove(id)
+        w.element.setPosition(windowFrame.origin)
+        beginMove(id, at: point, windowFrame: windowFrame)
+    }
+
+    /// A floating window being dragged by its title bar: the border follows the mouse
+    /// directly instead of the window's delayed position reports.
+    func followTitleBarDrag(_ id: CGWindowID, windowFrame: CGRect) {
+        nativeDrag = id
+        guard config.showFocusBorder else { return }
+        focusBorder.show(around: windowFrame, width: config.focusBorderWidth,
+                         windowCornerRadius: config.windowCornerRadius, above: id)
+    }
+
+    func endTitleBarDrag() {
+        nativeDrag = nil
+        updateFocusBorder()
     }
 
     /// Starts resizing the window at `point` (⌥ + right mouse). Only a preview is shown
@@ -1005,7 +1051,7 @@ final class WindowManager {
     /// follows the window while it is dragged or resized, and also frames floating windows.
     private func updateFocusBorder() {
         // During a gesture the border belongs to the preview (see `updateMove`, `updateResize`).
-        if gesture != nil { return }
+        if gesture != nil || nativeDrag != nil { return }
         guard config.showFocusBorder, let id = focusedID, let w = windows[id],
               !w.isMinimized, !parkedTabs.contains(id), !fullScreen.contains(id), !hiddenApps.contains(w.pid),
               isOnVisibleSpace(w), let frame = borderFrame(of: w) else {
@@ -1017,8 +1063,8 @@ final class WindowManager {
     }
 
     /// The window's actual frame; a window resting in its tile shares the border with its tab strip.
-    private func borderFrame(of w: ManagedWindow) -> CGRect? {
-        guard let actual = w.element.frame else { return nil }
+    private func borderFrame(of w: ManagedWindow, actual known: CGRect? = nil) -> CGRect? {
+        guard let actual = known ?? w.element.frame else { return nil }
         if let ws = workspace(containing: w.id), ws.zoomed != w.id, let g = ws.layout.group(containing: w.id),
            g.tabBarFrame != nil, actual.isClose(to: g.windowFrame, tolerance: 4) {
             return g.frame
