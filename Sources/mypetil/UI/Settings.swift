@@ -106,7 +106,7 @@ private struct LayoutPane: View {
             }
             SettingsRow("Seitenabstand:") {
                 ValueSlider(value: $store.config.outerGap, range: 0...24, step: 1, unit: "pt")
-                Hint("Links und rechts. Oben und unten reichen die Fenster bis an den Rand.")
+                Hint("Links und rechts. Oben reichen die Fenster bis an die Menüleiste, unten bleibt Platz für den Fokus-Rahmen.")
             }
             SettingsDivider()
             SettingsRow("Tab-Leiste:") {

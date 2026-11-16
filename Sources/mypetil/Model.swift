@@ -60,11 +60,13 @@ final class Workspace {
     func update(screen: NSScreen, config: Config) {
         screenFrame = Screens.toAX(screen.frame)
         visibleFrame = Screens.toAX(screen.visibleFrame)
+        // Tiles reach the menu bar. At the bottom edge they keep just enough room for the
+        // focus border to show, and the sidebar ends on the same line.
+        let height = visibleFrame.height - config.bottomMargin
         sidebarFrame = CGRect(x: visibleFrame.minX, y: visibleFrame.minY,
-                              width: config.sidebarWidth, height: visibleFrame.height)
+                              width: config.sidebarWidth, height: height)
         tilingBounds = CGRect(x: visibleFrame.minX + config.sidebarWidth, y: visibleFrame.minY,
-                              width: visibleFrame.width - config.sidebarWidth, height: visibleFrame.height)
-            // Tiles reach the menu bar and the bottom edge; only the sides keep a margin.
+                              width: visibleFrame.width - config.sidebarWidth, height: height)
             .insetBy(dx: config.outerGap, dy: 0)
     }
 }

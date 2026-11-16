@@ -37,6 +37,9 @@ struct Config: Codable, Equatable {
             ? 16 : 10
     static let sidebarWidthRange: ClosedRange<CGFloat> = 150...420
 
+    /// Space below tiles and sidebar: room for the focus border along the bottom edge.
+    var bottomMargin: CGFloat { showFocusBorder ? focusBorderWidth.rounded(.up) : 0 }
+
     var layoutOptions: LayoutOptions {
         LayoutOptions(gap: gap, tabBarHeight: tabBarHeight)
     }
