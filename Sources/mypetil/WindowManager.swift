@@ -736,6 +736,7 @@ final class WindowManager {
     func beginMove(_ id: CGWindowID, at point: CGPoint) {
         guard let w = windows[id], let frame = borderFrame(of: w) else { return }
         gesture = .move(MoveSession(id: id, startMouse: point, startFrame: frame))
+        overlays.show(moveOverlays(id, plan: nil))
         updateMove(at: point)
     }
 
@@ -850,21 +851,31 @@ final class WindowManager {
 
     // MARK: Gesture overlays
 
-    /// Every window that changes size as a result of the drop (the focus border marks the
-    /// landing spot itself), plus a hint when the window would become a tab.
+    /// A preview tile (icon and title) for every tiled window on screen, at the frame it would
+    /// have after the drop, so the whole layout reads at a glance. The focus border marks the
+    /// landing spot itself; a hint is added when the window would become a tab.
     private func moveOverlays(_ id: CGWindowID, plan: DropPlan?) -> [OverlayItem] {
-        guard let w = windows[id], let plan else { return [] }
-        var items: [OverlayItem] = []
+        guard let w = windows[id] else { return [] }
         let sourceWS = workspace(containing: id)
-        if plan.isTab {
+        var items: [OverlayItem] = []
+        if let plan, plan.isTab {
             items.append(OverlayItem(frame: plan.preview, style: .tabTarget, title: w.displayTitle, icon: w.icon))
         }
-        items += affectedOverlays(before: plan.workspace.layout, after: plan.result, excluding: id)
-        if let sourceWS, sourceWS !== plan.workspace {
-            let sim = sourceWS.tree.copy()
-            sim.remove(id)
-            let after = sim.layout(in: sourceWS.tilingBounds, minSizes: minSizes, options: config.layoutOptions)
-            items += affectedOverlays(before: sourceWS.layout, after: after, excluding: id)
+        for ws in workspaces {
+            let layout: LayoutResult
+            if let plan, ws === plan.workspace {
+                layout = plan.result
+            } else if plan != nil, ws === sourceWS {
+                let sim = ws.tree.copy()
+                sim.remove(id)
+                layout = sim.layout(in: ws.tilingBounds, minSizes: minSizes, options: config.layoutOptions)
+            } else {
+                layout = ws.layout
+            }
+            for g in layout.groups where !g.windows.contains(id) {
+                guard let other = windows[g.activeWindow] else { continue }
+                items.append(OverlayItem(frame: g.frame, style: .affected, title: other.displayTitle, icon: other.icon))
+            }
         }
         return items
     }
