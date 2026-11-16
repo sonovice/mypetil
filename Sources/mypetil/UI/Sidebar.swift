@@ -277,6 +277,8 @@ private struct SidebarRow: View {
     let actions: SidebarActions
     @State private var hovering = false
 
+    static let height: CGFloat = 38
+
     var body: some View {
         HStack(spacing: 8) {
             Image(nsImage: item.icon)
@@ -304,8 +306,9 @@ private struct SidebarRow: View {
         }
         .foregroundStyle(item.isFocused ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
         .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+        // Room for title and subtitle, so rows without a subtitle line up with the rest.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: Self.height)
         .opacity(item.isMinimized ? 0.5 : (item.isActiveTab || item.isFocused ? 1 : 0.75))
         .background(rowBackground, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .contentShape(Rectangle())
