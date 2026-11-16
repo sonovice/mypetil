@@ -34,7 +34,7 @@ Alles andere wird mit der Maus bedient.
 open build/mypetil.app
 ```
 
-Beim ersten Start fragt macOS nach der **Bedienungshilfen**-Berechtigung (Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen). Sobald sie erteilt ist, startet mypetil von selbst. Die App ist ad-hoc signiert, deshalb muss die Berechtigung nach einem Neubau eventuell neu gesetzt werden.
+Beim ersten Start fragt macOS nach der **Bedienungshilfen**-Berechtigung (Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen). Sobald sie erteilt ist, startet mypetil von selbst. Das Skript signiert mit deinem „Apple Development“-Zertifikat, damit die Berechtigung auch nach einem Neubau gültig bleibt. Mit `MYPETIL_SIGN_IDENTITY` lässt sich ein anderes Zertifikat wählen. Ohne Zertifikat wird ad-hoc signiert, und dann muss die Berechtigung nach jedem Neubau neu gesetzt werden.
 
 Zum Entwickeln geht auch `xcrun swift run`. Die Berechtigung gilt dann für das Terminal. Tests laufen mit `xcrun swift test`.
 
