@@ -375,7 +375,13 @@ final class WindowManager {
     private func rebuildWorkspaces() {
         let spaceDisplays = Spaces.displays()
         var numbers: [Spaces.ID: Int] = [:]
-        for d in spaceDisplays { for s in d.spaces { numbers[s.id] = s.number } }
+        var fullScreenSpaces: Set<Spaces.ID> = []
+        for d in spaceDisplays {
+            for s in d.spaces {
+                numbers[s.id] = s.number
+                if s.isFullScreen { fullScreenSpaces.insert(s.id) }
+            }
+        }
         spaceNumbers = numbers
 
         let screens = NSScreen.screens
@@ -402,7 +408,8 @@ final class WindowManager {
             }
         }
         targetFrames.removeAll()
-        sidebars.sync(workspaces, width: config.sidebarWidth, cornerRadius: config.windowCornerRadius,
+        // A native full-screen space belongs to its window alone: no sidebar there.
+        sidebars.sync(workspaces.filter { !fullScreenSpaces.contains($0.key.spaceID) }, width: config.sidebarWidth, cornerRadius: config.windowCornerRadius,
                       color: config.sidebarColor.flatMap(NSColor.init(hex:)))
         setNeedsLayout()
     }
