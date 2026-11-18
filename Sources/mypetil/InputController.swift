@@ -276,17 +276,29 @@ final class InputController {
     }
 
     /// The owner of the front-most visible window under `point`, across all window levels.
+    /// Windows covering a whole display are skipped: those are click-through system overlays
+    /// (Notification Center keeps one after showing a banner), never something to click.
     private static func frontmostOwner(at point: CGPoint) -> pid_t? {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
             as? [[String: Any]] else { return nil }
+        let displays = activeDisplayBounds()
         for info in list {
             guard (info[kCGWindowAlpha as String] as? Double ?? 1) > 0,
                   let boundsDict = info[kCGWindowBounds as String] as? NSDictionary,
                   let bounds = CGRect(dictionaryRepresentation: boundsDict),
-                  bounds.contains(point) else { continue }
+                  bounds.contains(point),
+                  !displays.contains(where: bounds.contains) else { continue }
             return info[kCGWindowOwnerPID as String] as? pid_t
         }
         return nil
+    }
+
+    private static func activeDisplayBounds() -> [CGRect] {
+        var count: UInt32 = 0
+        CGGetActiveDisplayList(0, nil, &count)
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        CGGetActiveDisplayList(count, &ids, &count)
+        return ids.prefix(Int(count)).map(CGDisplayBounds)
     }
 
     /// The front-most normal window under `point`, from any app but ours.
